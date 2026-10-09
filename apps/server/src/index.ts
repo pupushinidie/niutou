@@ -98,11 +98,13 @@ const OFFLINE_GRACE_MS = 3_000;
 /** 连续超时几次转托管。 */
 const AUTO_AFTER_TIMEOUTS = 2;
 /**
- * 超时代做用什么策略：开工拍板定的是补充文件 1.7 的简单基线（选牌不出最小的牌，选排按牛头最少 → 排尾最大 → 排号最小）。
- * 人机阶段要换成正式策略时，只改这一行（比如 (view, id) => botCommand(view, id) ?? baselineCommand(view, id)）。
- * 托管和离线不走这里，由人机（botCommand）代打。
+ * 单次超时代做用什么策略（开工拍板：「选牌超时按人机的简单策略出牌；比所有排都小时的选排超时，按人机算法选」）：
+ * - 选牌超时：补充文件 1.7 的简单基线（出最稳接得上的那张，不出最小的牌），简单、好解释，也不会比自己打得还好让人故意挂机；
+ * - 规则 C 选排超时：正式人机（用已亮出的牌算清楚收哪排后面最好打），出错或不给时退回基线。
+ * 连续 2 次超时转托管后由人机（botCommand）代打；离线也是人机代打。这两种不走这里。
  */
-const timeoutPolicy: TimeoutPolicy = baselineCommand;
+const timeoutPolicy: TimeoutPolicy = (view, playerId) =>
+  view.phase === "chooseRow" ? botCommand(view, playerId) ?? baselineCommand(view, playerId) : baselineCommand(view, playerId);
 /** 每局结束后把种子和动作序列追加到这里，便于复盘。 */
 const GAME_LOG = process.env.GAME_LOG ?? resolve(process.cwd(), "logs/games.jsonl");
 const TURN_CREDENTIAL_TTL_SECONDS = 24 * 60 * 60;

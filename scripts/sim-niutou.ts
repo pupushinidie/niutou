@@ -101,9 +101,10 @@ const villains = (process.argv[4] ?? "baseline,random").split(",");
 const tactics = process.argv[5] === "tactics";
 const optsJson = process.env.BOT_OPTS ? (JSON.parse(process.env.BOT_OPTS) as Partial<BotOptions>) : {};
 const hero = bot(optsJson);
+const villainBot: Policy = (view, id) => botCommand(view, id, process.env.VILLAIN_OPTS ? JSON.parse(process.env.VILLAIN_OPTS) : {});
 for (const n of counts) {
   for (const villainName of villains) {
-    const villain = villainName === "random" ? random : baseline;
+    const villain = villainName === "random" ? random : villainName === "bot" ? villainBot : baseline;
     match(`人机 vs ${villainName}${tactics ? "（战术）" : ""}`, hero, villain, n, games, tactics);
   }
   if (process.env.CONTROL) match(`基线 vs baseline（对照）`, baseline, baseline, n, games, tactics);

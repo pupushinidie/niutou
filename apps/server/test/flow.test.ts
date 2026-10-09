@@ -228,7 +228,7 @@ describe("服务器全流程", () => {
     expect(timed.game!.reveal!.plays.find((play) => play.player === "p1")!.card).toBe(49);
     expect(timed.members.find((member) => member.playerId === "p1")!.auto).toBeUndefined();
 
-    // 规则 C 超时：乙出 4，比所有排尾都小，基线选牛头最少的一排
+    // 规则 C 超时：乙出 4，比所有排尾都小，按人机算法代选（这个局面里就是牛头最少的第 4 排）
     inject(code, names, { players: [{ include: [60] }, { include: [4] }, { include: [70] }], rows: [[10, 13], [25], [40, 44, 48], [63]] });
     await updateWhere(h, host, (snapshot) => snapshot.game?.turn === 1);
     await ok(command(host, { type: "select", card: 60 }, h));

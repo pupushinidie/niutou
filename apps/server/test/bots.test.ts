@@ -178,6 +178,23 @@ describe("人机", () => {
     await updateWhere(host, (snapshot) => snapshot.members.length === 2 && !snapshot.members.some((member) => member.bot));
   });
 
+  it("10 人房一个人加满 9 个人机：名字排到咕噜九号，再加就满了；开局后人机真的在选牌", async () => {
+    const host = await connect();
+    await create(host, nick("十人"), 10);
+    for (let seat = 1; seat < 10; seat += 1) expect((await addBot(host)).ok).toBe(true);
+    expect((await addBot(host)).ok).toBe(false);
+    const room = await updateWhere(host, (snapshot) => snapshot.members.length === 10);
+    expect(room.members.slice(1).map((member) => member.name)).toEqual(
+      ["咕噜一号", "咕噜二号", "咕噜三号", "咕噜四号", "咕噜五号", "咕噜六号", "咕噜七号", "咕噜八号", "咕噜九号"],
+    );
+    expect(room.members.slice(1).every((member) => member.bot === true)).toBe(true);
+    expect((await start(host)).ok).toBe(true);
+    // 真人不动：9 个人机都选好，只等我一个
+    const waiting = await updateWhere(host, (snapshot) => snapshot.game?.phase === "select" && snapshot.game.players.filter((player) => player.selected).length === 9);
+    expect(waiting.game!.players.find((player) => !player.selected)!.id).toBe(seatOf(host));
+    expect((await call<void>((ack) => host.emit("room:dissolve", ack))).ok).toBe(true);
+  }, 30_000);
+
   it("一个人加满人机就能开局，人机把整局打完；人机自动同意再来一局", async () => {
     const host = await connect();
     await create(host, nick("独行"), SOLO_CAPACITY);

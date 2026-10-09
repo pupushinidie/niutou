@@ -2,7 +2,7 @@
  * 真实计时（TURN_MS 调小）：选牌倒计时大家共用，别人选牌不会把它往后推；规则 C 选排、局末都会自己超时往下走。
  */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { buildGame, type LobbyRoomSnapshot } from "@niutou/game";
+import { botCommand, buildGame, type LobbyRoomSnapshot } from "@niutou/game";
 import { call, command, delay, join, ok, startServer, updateWhere, type Harness } from "./harness.js";
 
 process.env.TURN_MS = "600";
@@ -44,7 +44,7 @@ describe("超时（TURN_MS=600）", () => {
     await ok(call<void>((ack) => host.emit("room:dissolve", ack)));
   });
 
-  it("规则 C 选排没人选：到点按基线（牛头最少）代选，继续结算", async () => {
+  it("规则 C 选排没人选：到点按人机算法代选（开工拍板，人机阶段换上），继续结算", async () => {
     const { code, host, guest, names } = await twoSeats();
     await ok(call<LobbyRoomSnapshot>((ack) => host.emit("room:start", ack)));
     await updateWhere(h, guest, (snapshot) => snapshot.game !== undefined);
@@ -55,9 +55,15 @@ describe("超时（TURN_MS=600）", () => {
     await ok(command(host, { type: "select", card: 4 }, h));
     await ok(command(guest, { type: "select", card: 7 }, h));
     await updateWhere(h, guest, (snapshot) => snapshot.game?.phase === "chooseRow");
+    // 甲自己看到的局面（服务器发给他的就是 redact 后的视角），人机在这上面会选哪排
+    const mine = await updateWhere(h, host, (snapshot) => snapshot.game?.phase === "chooseRow");
+    const expected = botCommand(mine.game!, "p1");
+    expect(expected?.type).toBe("chooseRow");
+    const row = (expected as { row: number }).row;
     const done = await updateWhere(h, guest, (snapshot) => snapshot.game?.phase === "select" && snapshot.game.turn === 2, 5_000);
     expect(done.game!.events[0]).toEqual({ type: "TimedOut", phase: "chooseRow", players: ["p1"] });
-    expect(done.game!.rows[3]).toEqual([4, 7]);
+    expect(done.game!.reveal!.steps[0]).toMatchObject({ kind: "low", row, player: "p1" });
+    expect(done.game!.rows[row]).toEqual([4, 7]);
     await ok(call<void>((ack) => host.emit("room:dissolve", ack)));
   });
 

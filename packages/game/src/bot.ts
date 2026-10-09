@@ -34,6 +34,14 @@ export interface BotOptions {
   readonly tie: number;
   /** 往后模拟几手（含这一手）；Infinity = 打完这一局。 */
   readonly depth: number;
+  /** 推演里自己以后几手怎么出：baseline = 简单基线；quick = 快速打法（见 quickPick）。 */
+  readonly selfPolicy: "baseline" | "quick";
+  /** 推演里对手以后几手怎么出（不乱出的时候）。 */
+  readonly oppPolicy: "baseline" | "quick";
+  /** 这一手对手怎么出（不乱出的时候）。 */
+  readonly oppFirst: "baseline" | "quick";
+  /** 快速打法里「先出大牌」的分量。 */
+  readonly urgency: number;
 }
 
 export const DEFAULT_BOT_OPTIONS: BotOptions = {
@@ -44,6 +52,10 @@ export const DEFAULT_BOT_OPTIONS: BotOptions = {
   leaderWeight: 0,
   tie: 0.3,
   depth: Infinity,
+  selfPolicy: "baseline",
+  oppPolicy: "baseline",
+  oppFirst: "baseline",
+  urgency: 0.3,
 };
 
 /** 人机的一个决定：动作 + 一句玩家听得懂的理由；detail 给测试和调试看。 */
@@ -124,6 +136,44 @@ function baselinePick(hand: readonly number[], rows: readonly (readonly number[]
   return best >= 0 ? best : min;
 }
 
+/**
+ * 推演里用的「快速打法」（比基线聪明一点，算得很快）：每张牌估一个这一手的风险——
+ * 规则 C 就是最便宜那排的牛头 + 1；满排就是那排的牛头；否则按「别人的牌落进缺口的张数 ≈ 泊松分布」估正好凑满第六张的概率 × 那排牛头；
+ * 风险差不多时先出大的（大牌越晚越难出）。m = 一起出牌的对手数，q ≈ 每张没见过的牌被某个对手这一手打出来的概率。
+ */
+function quickPick(hand: readonly number[], rows: readonly (readonly number[])[], bulls: readonly number[], m: number, q: number, urgency: number): number {
+  let minBulls = Infinity;
+  for (const b of bulls) if (b < minBulls) minBulls = b;
+  let best = hand[0]!;
+  let bestCost = Infinity;
+  for (const card of hand) {
+    const row = target(rows, card);
+    let cost: number;
+    if (row < 0) cost = minBulls + 1;
+    else {
+      const length = rows[row]!.length;
+      const space = ROW_LIMIT - length;
+      if (space === 0) cost = bulls[row]!;
+      else {
+        const tail = rows[row]![length - 1]!;
+        let gap = card - tail - 1;
+        for (const other of hand) if (other > tail && other < card) gap -= 1;
+        const mu = m * Math.min(1, gap * q);
+        // 泊松：P(N = space)
+        let pk = Math.exp(-mu);
+        for (let k = 1; k <= space; k += 1) pk *= mu / k;
+        cost = pk * (bulls[row]! + 1);
+      }
+    }
+    cost -= (urgency * card) / 104;
+    if (cost < bestCost) {
+      bestCost = cost;
+      best = card;
+    }
+  }
+  return best;
+}
+
 /** 基线选排：牛头最少 → 排尾最大 → 排号最小。 */
 function baselineRowFast(rows: readonly (readonly number[])[], bulls: readonly number[]): number {
   let best = 0;
@@ -192,6 +242,8 @@ interface Context {
   /** 2 人局对手下标；多人局累计罚分最少的对手下标（领先者）。 */
   readonly rival: number;
   readonly zeroSum: boolean;
+  /** 快速打法用：某张没见过的牌这一手被某个对手打出的概率（≈ 1 / 没见过的牌数）。 */
+  readonly q: number;
   readonly rng: () => number;
   readonly opts: BotOptions;
 }
@@ -222,6 +274,7 @@ function makeContext(view: GameState, playerId: string, opts: BotOptions): Conte
     handsLeft: hand.length,
     rival,
     zeroSum: view.players.length === 2,
+    q: 1 / Math.max(1, unknown.length),
     rng: makeRng(hashState(view, playerId, hand)),
     opts,
   };
@@ -287,7 +340,10 @@ function rollout(ctx: Context, world: World, rows: number[][], bulls: number[], 
     for (let p = 0; p < ctx.n; p += 1) {
       const hand = hands[p]!;
       if (hand.length === 0) continue;
-      const card = p === ctx.me ? baselinePick(hand, rows) : modelPick(hand, rows, noise[p]!, ctx.opts.oppRandom);
+      let card: number;
+      if (p === ctx.me) card = ctx.opts.selfPolicy === "quick" ? quickPick(hand, rows, bulls, ctx.n - 1, ctx.q, ctx.opts.urgency) : baselinePick(hand, rows);
+      else if (ctx.opts.oppPolicy === "quick" && noise[p]! >= ctx.opts.oppRandom) card = quickPick(hand, rows, bulls, ctx.n - 1, ctx.q, ctx.opts.urgency);
+      else card = modelPick(hand, rows, noise[p]!, ctx.opts.oppRandom);
       hand.splice(hand.indexOf(card), 1);
       cards.push(card);
       owners.push(p);
@@ -326,7 +382,12 @@ function evaluateCards(ctx: Context): { stats: CardStats[]; worlds: number } {
     const oppOwners: number[] = [];
     for (let p = 0; p < ctx.n; p += 1) {
       if (p === ctx.me) continue;
-      oppCards.push(modelPick(world.hands[p]!, rows0, world.noise[0]![p]!, ctx.opts.oppRandom));
+      const noise = world.noise[0]![p]!;
+      oppCards.push(
+        ctx.opts.oppFirst === "quick" && noise >= ctx.opts.oppRandom
+          ? quickPick(world.hands[p]!, rows0, bulls0, ctx.n - 1, ctx.q, ctx.opts.urgency)
+          : modelPick(world.hands[p]!, rows0, noise, ctx.opts.oppRandom),
+      );
       oppOwners.push(p);
     }
     const afterHands = world.hands.map((hand) => hand.filter((card) => !oppCards.includes(card)));
@@ -519,6 +580,11 @@ function chooseRowReason(ctx: Context, chosen: RowStats, options: RowStats[]): s
 }
 
 // ---------- 入口 ----------
+
+/** 这个座位眼里「看不到的牌」（对手手里的 + 没发的）：这一局用的牌去掉本局亮过的牌和自己的手牌。测试用。 */
+export function botUnknownCards(view: GameState, playerId: string): number[] {
+  return makeContext(view, playerId, DEFAULT_BOT_OPTIONS)?.unknown ?? [];
+}
 
 /**
  * 人机的决定和理由（教程「提示」按钮用）。view 必须是 redactGameForViewer(game, playerId) 之后的状态。
