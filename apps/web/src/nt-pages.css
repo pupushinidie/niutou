@@ -17,12 +17,14 @@
   display: grid;
   grid-template-columns: 512px minmax(360px, 440px) minmax(280px, 1fr);
   grid-template-areas: "hero entry rooms";
+  grid-template-rows: minmax(0, 1fr);
   gap: 16px;
   min-height: 0;
   padding-top: 12px;
 }
 .nt-home-hero { grid-area: hero; display: flex; flex-direction: column; gap: 12px; min-height: 0; }
-.nt-entry { grid-area: entry; align-self: start; }
+.nt-entry { grid-area: entry; align-self: center; }
+.nt-home-hero { align-self: center; }
 .nt-home-rooms { grid-area: rooms; min-height: 0; overflow-y: auto; }
 .nt-hero-art {
   position: relative;
@@ -160,8 +162,13 @@
   .app-shell .nt-hero-art h1 { font-size: 36px; left: 10px; bottom: 8px; }
   .nt-home-hero { gap: 8px; }
   .nt-home-hero .nt-kinds, .nt-home-facts { display: none; }
-  .nt-home-hero { order: 1; }
+  .nt-home-hero { display: contents; }
+  .nt-hero-art { order: 1; }
   .nt-entry { order: 2; }
+  .nt-lead { order: 3; }
+  .app-shell .nt-entry .entry-card-heading { display: none; }
+  .app-shell .nt-entry { padding: 12px 14px; }
+  .app-shell .nt-entry .entry-form { margin-top: 8px; }
   .nt-home-rooms { order: 3; overflow: visible; }
   .nt-capacity { grid-template-columns: repeat(5, minmax(0, 1fr)); }
   .nt-room-info { display: contents; }
@@ -177,3 +184,8 @@
   .nt-room-kinds .nt-kinds { gap: 4px; }
 }
 .nt-room-seat.open .nt-room-seat-name strong { color: var(--muted); font-size: 12px; line-height: 16px; }
+/* 中等宽度和手机：两列座位里名字放不下 24px，用 12px（不截断「咕噜一号」） */
+@media (max-width: 1279px) {
+  .nt-room-seat-name strong { font-size: 12px; line-height: 16px; }
+}
+.app-shell .nt-pagebar .gm-modal-backdrop { white-space: normal; }

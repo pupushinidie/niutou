@@ -387,6 +387,8 @@
 @media (max-width: 520px) {
   .app-shell .gm-panel.nt-final, .app-shell .gm-panel.nt-round-end, .app-shell .gm-panel.nt-rules { padding: 14px 12px; }
   .nt-final-head { flex-wrap: wrap; }
+  .nt-final-head > div:nth-child(2) { flex: 1 1 200px; }
+  .nt-final-head .nt-poster { margin: 0 auto; }
   .nt-rules-body { grid-template-columns: 1fr; }
   .nt-poster { transform: none; }
 }
@@ -397,4 +399,29 @@
 
 @media (prefers-reduced-motion: reduce) {
   .nt-thinking, .nt-cell.live, .nt-timer.urgent, .nt-flip, .nt-sparkle, .nt-lamp { animation: none; }
+}
+/* 顶栏是 nowrap；从顶栏里打开的弹窗、浮层恢复正常换行 */
+.nt-top :is(.gm-modal-backdrop, .game-room-popover, .nt-menu) { white-space: normal; }
+
+/* 手机：对手小卡角上的「机 / 托 / 离」 */
+.nt-chip { position: relative; }
+.nt-chip-badge { position: absolute; right: 0; top: 0; padding: 0 2px; font-style: normal; font-size: 12px; line-height: 14px; color: #fff4dc; background: #4a3020; }
+.nt-chip-badge.bot { color: #d8e8ff; background: #2a62c0; }
+.nt-chip-badge.auto, .nt-chip-badge.off { color: #ffd8d0; background: #6e1020; }
+/* 手机：托管时整行的提示条 + 取消托管 */
+.nt-autobar { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 4px 6px; color: #8ec0ff; background: rgba(44, 29, 19, 0.94); font-size: 12px; box-shadow: 0 0 0 var(--px) var(--edge), inset 0 0 0 var(--px) #2a62c0; }
+/* 手机终局：去掉每局明细、缩小通缉令，「再来一局」一直贴在弹窗底部 */
+@media (max-width: 699px) {
+  .nt-final .nt-rounds, .nt-final th:nth-child(2) { display: none; }
+  .nt-final .nt-score-table td { padding: 2px 4px; }
+  .nt-final .nt-final-head { flex-wrap: nowrap; gap: 8px; }
+  .nt-final .nt-poster { width: 64px; height: 80px; margin: 0; }
+  .nt-final .nt-poster-bg { width: 64px; height: 80px; }
+  .nt-final .nt-poster-face { left: 16px; top: 23px; width: 32px; height: 32px; }
+  .nt-final .nt-poster b { top: 4px; font-size: 12px; }
+  .nt-final .nt-poster span { top: 60px; }
+  .nt-final .nt-poster-king { width: 48px; height: 48px; right: -12px; bottom: -12px; }
+  .nt-final .nt-star, .nt-final .nt-star img { width: 32px; height: 32px; }
+  .nt-final .nt-rematch { position: sticky; bottom: -14px; margin: 8px -12px -14px; padding: 8px 12px; background: var(--panel); box-shadow: 0 calc(var(--px) * -1) 0 0 #4a3020; }
+  .nt-final .nt-mini-avatar, .nt-final .nt-mini-avatar img { width: 32px; height: 32px; }
 }

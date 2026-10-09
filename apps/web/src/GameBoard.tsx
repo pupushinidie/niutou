@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import {
+  botHint,
   bullheads,
   legalActions,
   stepKey,
@@ -58,6 +59,8 @@ interface GameBoardProps {
   readonly onLeave: () => void;
   /** 预览页用：第一次渲染也放亮牌动画、把动画时钟停在某一刻。 */
   readonly playback?: PlaybackOptions;
+  /** 显示「提示」按钮（教程、练习局用）：人机给一句理由，并替你选中那张牌 / 那一排（还要你自己点确认）。 */
+  readonly showHint?: boolean;
 }
 
 const ROW_LABEL = ["第 1 排", "第 2 排", "第 3 排", "第 4 排"];
@@ -284,6 +287,18 @@ function GameBoard(props: GameBoardProps) {
   }
   const canContinue = !spectating && actions.some((action) => action.type === "nextRound");
 
+  // 「提示」：人机替我算一手，选中那张牌 / 那一排，理由写在提示条里
+  const [hintText, setHintText] = useState("");
+  useEffect(() => setHintText(""), [step]);
+  function askHint() {
+    const decision = botHint(game, myId);
+    if (!decision) return;
+    if (decision.command.type === "select") setPicked(decision.command.card);
+    if (decision.command.type === "chooseRow") setPickedRow(decision.command.row);
+    setHintText(decision.reason);
+  }
+  const canHint = props.showHint === true && (canSelect || iChoose);
+
   // 键盘：←→ 挑手牌，空格 / 回车确认，Esc 取消；规则 C 时 1–4 选排
   const keyState = useRef({ canSelect, picked, iChoose, pickedRow, hand: me.hand, canUndo });
   keyState.current = { canSelect, picked, iChoose, pickedRow, hand: me.hand, canUndo };
@@ -395,7 +410,8 @@ function GameBoard(props: GameBoardProps) {
   useEffect(() => {
     const timedOut = game.events.find((event) => event.type === "TimedOut");
     if (timedOut && timedOut.type === "TimedOut" && selfId && timedOut.players.includes(selfId)) {
-      showFlash(timedOut.phase === "chooseRow" ? "你超时了，系统替你选了一排。" : timedOut.phase === "roundEnd" ? "已自动开始下一局。" : "你超时了，系统替你出了牌。", true);
+      const mine = game.reveal?.plays.find((play) => play.player === selfId)?.card;
+      showFlash(timedOut.phase === "chooseRow" ? "你超时了，系统替你选了一排。" : timedOut.phase === "roundEnd" ? "已自动开始下一局。" : `你超时了，系统替你出了${mine !== undefined ? ` ${mine}` : "牌"}。`, true);
     }
   }, [game.version]);
   useEffect(() => () => {
@@ -439,7 +455,7 @@ function GameBoard(props: GameBoardProps) {
   if (anim) {
     prompt = "亮牌！从小到大放";
     const current = frame?.step;
-    if (current) sub = `${nameOf(current.player)}：${current.card} ${current.kind === "place" ? `接到${ROW_LABEL[current.row]}第 ${current.position} 张` : current.kind === "sixth" ? `是${ROW_LABEL[current.row]}第六张，收走 ${current.taken.length} 张，+${current.bulls} 牛头` : `比排尾都小，收${ROW_LABEL[current.row]}，+${current.bulls} 牛头`}`;
+    if (current) sub = `${nameOf(current.player)}：${current.card} ${current.kind === "place" ? `接到${ROW_LABEL[current.row]}第 ${current.position} 张` : current.kind === "sixth" ? `是${ROW_LABEL[current.row]}第六张，收走 ${current.taken.length} 张，+${current.bulls} 牛头` : `比排尾都小，${current.auto ? "代选" : ""}收${ROW_LABEL[current.row]}，+${current.bulls} 牛头`}`;
     else sub = `这一手：${(reveal?.plays ?? []).map((play) => play.card).join("、")}`;
   } else if (game.phase === "gameOver") {
     prompt = "游戏结束";
@@ -472,6 +488,7 @@ function GameBoard(props: GameBoardProps) {
     prompt = `第 ${game.round} 局结束`;
     sub = "看看这局谁收了多少";
   }
+  if (hintText && !anim && (canSelect || iChoose)) sub = `提示：${hintText}`;
   const urgent = secondsLeft !== null && secondsLeft <= 5 && waiting.includes(myId) && !spectating && !anim;
   const showTimer = !anim && game.phase !== "gameOver" && secondsLeft !== null;
 
@@ -630,13 +647,17 @@ function GameBoard(props: GameBoardProps) {
       {canContinue && !anim && (
         <button className="primary-button nt-big" type="button" disabled={busy} onClick={() => onCommand({ type: "nextRound" })} data-tutorial="continue">继续</button>
       )}
-      {autoPlaying && game.phase !== "gameOver" && (
+      {autoPlaying && game.phase !== "gameOver" && layout.mode !== "phone" && (
         <button className="primary-button nt-big" type="button" onClick={() => onAuto(false)} data-tutorial="cancel-auto">取消托管</button>
       )}
       {anim && (
         <button className="quiet-button nt-small" type="button" onClick={() => playback.skip()}>跳过动画</button>
       )}
-      <span data-tutorial="hint-button" className="nt-hint-anchor" />
+      {canHint ? (
+        <button className="quiet-button nt-small" type="button" onClick={askHint} data-tutorial="hint-button">提示</button>
+      ) : (
+        <span data-tutorial="hint-button" className="nt-hint-anchor" />
+      )}
     </div>
   );
 
@@ -751,6 +772,9 @@ function GameBoard(props: GameBoardProps) {
                   )}
                 </div>
                 <b className="nt-chip-bulls" data-tutorial="seat-bulls">{props2.bulls}</b>
+                {props2.member?.bot ? <em className="nt-chip-badge bot" title="人机">机</em>
+                  : props2.member && !props2.member.connected ? <em className="nt-chip-badge off" title="离线（人机代打）">离</em>
+                  : props2.member?.auto ? <em className="nt-chip-badge auto" title="托管中">托</em> : null}
                 {!many && <span className="nt-chip-name">{player.name}</span>}
               </div>
             );
@@ -758,6 +782,12 @@ function GameBoard(props: GameBoardProps) {
         </div>
         {flashLine}
         {table}
+        {autoPlaying && game.phase !== "gameOver" && (
+          <div className="nt-autobar" role="status">
+            <span>托管中：人机正在替你出牌</span>
+            <button className="primary-button nt-big" type="button" onClick={() => onAuto(false)} data-tutorial="cancel-auto">取消托管</button>
+          </div>
+        )}
         <div className="nt-handbar">
           {showStrip ? strip : hand}
           <div className="nt-pbuttons">

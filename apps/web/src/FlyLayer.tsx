@@ -53,13 +53,14 @@ export default function FlyLayer({ anim, now, rows, frozen, reduced }: FlyLayerP
   useEffect(() => {
     if (!anim || reduced) return;
     if (frozen) {
-      // 冻住的时钟：等版面排好、图片载入后再画两次
-      const a = window.setTimeout(() => setTick((value) => value + 1), 60);
-      const b = window.setTimeout(() => setTick((value) => value + 1), 400);
-      return () => {
-        window.clearTimeout(a);
-        window.clearTimeout(b);
-      };
+      // 冻住的时钟：版面、字体、图片还在变的头几秒里反复量位置重画
+      let count = 0;
+      const timer = window.setInterval(() => {
+        setTick((value) => value + 1);
+        count += 1;
+        if (count > 20) window.clearInterval(timer);
+      }, 150);
+      return () => window.clearInterval(timer);
     }
     const loop = () => {
       setTick((value) => value + 1);

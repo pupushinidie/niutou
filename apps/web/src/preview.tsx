@@ -8,7 +8,7 @@
  *                 chooseRowOther、afterChooseRow、doubleSixth、lastHand、roundEnd、gameOver、gameOverTie、tenPlayers、
  *                 tenPlayersReveal、tactics、timeout、fixedRounds），另外有：
  *                 home（首页）、home-rooms（首页带在线牌桌）、waiting-1 / waiting-full / waiting-bots / waiting-guest / waiting-spec（等候房间）、
- *                 picked（选中一张还没确认）、pickedSixth（选中的牌会是第六张）、tenPlayersRound（10 人局局末）、tenFull（10 人、每排都快满、手牌 10 张）
+ *                 tenGameOver（10 人局终局）、picked（选中一张还没确认）、pickedSixth（选中的牌会是第六张）、tenPlayersRound（10 人局局末）、tenFull（10 人、每排都快满、手牌 10 张）
  *   &n=<人数>      2–10（opening / selectSome / selectedMine / waitingOne / midRound / timeout 有效）
  *   &v=<座位>      从哪个座位看，默认 p1
  *   &bots=p2,p3   人机座位    &auto=p1  托管中    &offline=p3  离线
@@ -19,12 +19,14 @@
  *   &live=1       别人由人机自动选牌、选排、点继续，可以一直玩下去
  *   &pick=<牌>    进来就选中这张手牌（只抬起，不提交）
  *   &seed=<数>     发牌种子
+ *   &hint=1       显示「提示」按钮（教程、练习局用）
  *   &err=<文字>    模拟服务器拒绝了动作（看非法操作提示）
  */
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import ReactDOM from "react-dom/client";
 import {
   applyCommand,
+  autoPlayHands,
   baselineCommand,
   botCommand,
   buildGame,
@@ -117,6 +119,13 @@ function buildScene(): GameState {
     while (state.phase === "select") state = playHand(state, {}, 0);
     return state;
   }
+  if (sceneName === "tenGameOver") {
+    // 10 人局终局（目标 10 分，一局就结束）
+    let state = autoPlayHands(buildGame({ players: 10, options: { target: 10 }, seed }), 10);
+    while (state.phase === "chooseRow") state = applyCommand(state, state.chooser!, { type: "chooseRow", row: 0 });
+    while (state.phase === "select") state = autoPlayHands(state, 1);
+    return state;
+  }
   if (sceneName === "picked" || sceneName === "pickedSixth") return createScene("selectSome", { players, seed });
   if ((SCENE_NAMES as readonly string[]).includes(sceneName)) return createScene(sceneName as SceneName, { players, seed });
   return createScene("opening", { players, seed });
@@ -206,6 +215,7 @@ function BoardPreview() {
         onWatch={setWatchId}
         onLeave={() => setError("预览页：离开观战只在真房间里有效")}
         playback={{ playOnMount: play, ...(frozenAt !== undefined ? { frozenAt } : {}) }}
+        showHint={params.get("hint") === "1"}
       />
       {confirmDialog}
     </main>
