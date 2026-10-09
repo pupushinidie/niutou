@@ -53,3 +53,4 @@
 .nt-standings li { display: flex; justify-content: space-between; gap: 12px; color: var(--text); }
 .nt-standings li.winner { color: var(--gold); }
 .nt-rematch { display: flex; flex-direction: column; gap: 8px; color: var(--muted); }
+.nt-row .primary-button, .nt-actions .primary-button { width: auto; flex: 0 0 auto; padding-inline: 16px; }

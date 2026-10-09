@@ -254,3 +254,45 @@ describe("规则书#TC13 选牌校验", () => {
     expect(() => applyCommand(fresh, 甲, { type: "chooseRow", row: 0 })).toThrow("现在不需要选排");
   });
 });
+
+describe("规则书#5 特殊情况和边界", () => {
+  it("规则书#5 一排已有 5 张、同一手两张牌都要接到这一排：小的先收 5 张成为新排头，大的接在它后面", () => {
+    const state = playOnRows([[10], [20, 21, 23, 24, 25], [40], [63]], [27, 26]);
+    expect(state.players[1]!.taken).toEqual([20, 21, 23, 24, 25]);
+    expect(state.players[0]!.taken).toEqual([]);
+    expect(state.rows[1]).toEqual([26, 27]);
+  });
+
+  it("规则书#5 规则 C 时好几排牛头一样少：由玩家自己选，选哪排都行（不强制选最少的）", () => {
+    const rows = [[41, 42], [61, 62], [15], [97, 98]];
+    expect(rowsBulls(rows)).toEqual([2, 2, 2, 2]);
+    for (const row of [0, 1, 2, 3]) {
+      const state = applyCommand(playOnRows(rows, [4, 99]), 甲, { type: "chooseRow", row });
+      expect(state.players[0]!.taken).toEqual(rows[row]);
+    }
+    // 牛头更多的排也可以选
+    const pricey = applyCommand(playOnRows([[10, 13], [25], [40, 44, 48], [63]], [4, 99]), 甲, { type: "chooseRow", row: 2 });
+    expect(pricey.players[0]!.roundBulls).toBe(9);
+  });
+
+  it("规则书#5 规则 C 收的那一排不满 5 张：有几张收几张", () => {
+    const state = applyCommand(playOnRows([[10, 13], [25], [40, 44, 48], [63]], [4, 99]), 甲, { type: "chooseRow", row: 2 });
+    expect(state.players[0]!.taken).toEqual([40, 44, 48]);
+    expect(state.rows[2]).toEqual([4]);
+  });
+
+  it("规则书#5 规则 C 收走一排后，同一手后面的牌按新的 4 排结算（可能接到别处、甚至成第六张）", () => {
+    // 甲 25 收第 1 排后，乙的 62 本想接 61，改去满排 → 第六张
+    const state = applyCommand(playOnRows([[58, 61], [30, 33, 36, 38, 40], [70], [90]], [25, 62]), 甲, { type: "chooseRow", row: 0 });
+    expect(state.reveal!.steps.map((step) => step.kind)).toEqual(["low", "sixth"]);
+    expect(state.players[1]!.roundBulls).toBe(13);
+  });
+
+  it("规则书#4.3 局中超过目标分也要打完这一局，只在局末检查", () => {
+    const start = buildGame({ players: [{ include: [30], total: 65 }, { include: [64] }], rows: [[10], [20, 21, 23, 24, 25], [40], [63]], turn: 3 });
+    const state = playHand(start, [30, 64]);
+    expect(state.players[0]!.roundBulls).toBe(8);
+    expect(state.phase).toBe("select");
+    expect(state.players[0]!.total).toBe(65);
+  });
+});
