@@ -126,6 +126,8 @@ export function useRevealPlayback(game: GameState, options: PlaybackOptions = {}
       seen.current = { id: -1, steps: 0 };
       return;
     }
+    // 比已经放过的还旧的亮牌（旧快照晚到）不放；再来一局后 id 从 1 重新算
+    if (reveal.id < seen.current.id && reveal.id > 1) return;
     const isNew = reveal.id !== seen.current.id;
     const grew = !isNew && reveal.steps.length > seen.current.steps;
     if (!isNew && !grew) return;

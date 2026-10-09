@@ -294,6 +294,7 @@
 .nt-poster { position: relative; flex: 0 0 auto; width: 128px; height: 160px; }
 .nt-poster-bg { position: absolute; inset: 0; }
 .nt-poster-face { position: absolute; left: 32px; top: 46px; }
+.nt-poster-king { position: absolute; right: -16px; bottom: -8px; }
 .nt-poster b { position: absolute; left: 0; right: 0; top: 10px; color: #7a2a22; font-size: 24px; font-weight: 400; text-align: center; line-height: 1; }
 .nt-poster span { position: absolute; left: 4px; right: 4px; top: 118px; color: #2a1a10; font-size: 12px; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .nt-rematch { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; color: var(--muted); font-size: 12px; }
@@ -302,7 +303,7 @@
 /* ---------- 规则弹窗 ---------- */
 .app-shell .gm-panel.nt-rules { width: min(860px, 100%); max-height: calc(100vh - 48px); overflow-y: auto; }
 .nt-rules-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.nt-rules-body { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 24px; margin-top: 8px; color: var(--text); font-size: 12px; line-height: 1.7; }
+.nt-rules-body { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px 24px; margin-top: 8px; color: var(--text); font-size: 12px; line-height: 1.7; }
 .nt-rules-body h3 { display: flex; align-items: center; gap: 6px; margin: 0 0 4px; color: #f0c050; font-size: 24px; font-weight: 400; }
 .nt-rules-body p, .nt-rules-body ol, .nt-rules-body ul { margin: 0; padding-left: 18px; }
 .nt-rules-body p { padding-left: 0; }

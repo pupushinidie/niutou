@@ -347,7 +347,9 @@ function GameBoard(props: GameBoardProps) {
   useEffect(() => {
     const seen = logged.current;
     if (game.version === seen.version) return;
-    const restarted = game.version < seen.version;
+    // 再来一局：版本从头算；只差几步的旧快照（回执比广播晚到）直接忽略
+    const restarted = game.version + 10 < seen.version;
+    if (game.version < seen.version && !restarted) return;
     const lines: LogLine[] = [];
     const reveal = game.reveal;
     if (reveal && (reveal.id !== seen.reveal || reveal.steps.length > seen.steps)) {
@@ -366,7 +368,14 @@ function GameBoard(props: GameBoardProps) {
       if (event.type === "TimedOut") lines.push({ key: `e${game.version}-to`, text: `${event.players.map(nameOf).join("、")} 超时，系统代${event.phase === "chooseRow" ? "选排" : event.phase === "roundEnd" ? "点继续" : "出牌"}` });
     }
     seen.version = game.version;
-    if (lines.length || restarted) setLog((previous) => [...lines.reverse(), ...(restarted ? [] : previous)].slice(0, 80));
+    const fresh = [...lines].reverse();
+    if (lines.length || restarted) {
+      setLog((previous) => {
+        const kept = restarted ? [] : previous;
+        const known = new Set(kept.map((line) => line.key));
+        return [...fresh.filter((line) => !known.has(line.key)), ...kept].slice(0, 80);
+      });
+    }
   }, [game.version]);
 
   // ---------- 提示条（错误、通知、超时）按时消失 ----------
@@ -430,7 +439,7 @@ function GameBoard(props: GameBoardProps) {
   if (anim) {
     prompt = "亮牌！从小到大放";
     const current = frame?.step;
-    if (current) sub = `${nameOf(current.player)} 的 ${current.card}${current.kind === "place" ? `接到${ROW_LABEL[current.row]}` : current.kind === "sixth" ? `是${ROW_LABEL[current.row]}第六张，收走 ${current.taken.length} 张` : `收${ROW_LABEL[current.row]}`}`;
+    if (current) sub = `${nameOf(current.player)}：${current.card} ${current.kind === "place" ? `接到${ROW_LABEL[current.row]}第 ${current.position} 张` : current.kind === "sixth" ? `是${ROW_LABEL[current.row]}第六张，收走 ${current.taken.length} 张，+${current.bulls} 牛头` : `比排尾都小，收${ROW_LABEL[current.row]}，+${current.bulls} 牛头`}`;
     else sub = `这一手：${(reveal?.plays ?? []).map((play) => play.card).join("、")}`;
   } else if (game.phase === "gameOver") {
     prompt = "游戏结束";
@@ -506,7 +515,7 @@ function GameBoard(props: GameBoardProps) {
 
   // ---------- 4 排 ----------
   const table = (
-    <section className={`nt-table${iChoose ? " choosing" : ""}`} data-tutorial="rows" aria-label="桌上的 4 排">
+    <section className={`nt-table${iChoose ? " choosing" : ""}`} data-tutorial="rows" data-tutorial-state={iChoose ? "choosing" : game.phase === "chooseRow" && !anim ? "others-choosing" : undefined} aria-label="桌上的 4 排">
       {rows.map((row, r) => {
         const emptied = frame?.emptiedRow === r;
         const pendingSixth = frame?.pending?.row === r && frame.pending.at === "sixth" ? frame.pending.card : null;
@@ -686,7 +695,7 @@ function GameBoard(props: GameBoardProps) {
     <div className="nt-side-inner">
       <section className="nt-log" data-tutorial="log">
         <h3>记录</h3>
-        {log.length === 0 ? <p className="nt-muted">亮牌后这里会记下每一手。</p> : <ul>{log.map((line) => <li key={line.key}>{line.text}</li>)}</ul>}
+        {log.length === 0 ? <p className="nt-muted">亮牌后这里会记下每一手。</p> : <ul>{log.filter((line) => !(anim && line.key.startsWith(`s${anim.revealId}-`))).map((line) => <li key={line.key}>{line.text}</li>)}</ul>}
       </section>
       <div className="nt-chat">{chat}</div>
     </div>
@@ -779,7 +788,7 @@ function GameBoard(props: GameBoardProps) {
         {roundInfo}
         <div className="nt-top-right">
           {layout.mode === "mid" && (
-            <button className="quiet-button" type="button" aria-expanded={drawer} onClick={() => setDrawer(!drawer)}>记录·聊天</button>
+            <button className="quiet-button nt-drawer-button" type="button" aria-expanded={drawer} onClick={() => setDrawer(!drawer)}>记录·聊天</button>
           )}
           {menuItems}
           {connection}
@@ -880,7 +889,7 @@ function FinalDialog({ game, room, myId, spectating, onRematch, onLeave }: {
   const iWon = result.winners.includes(myId);
   const title = spectating
     ? `${winners.map((player) => player.name).join("、")} ${winners.length > 1 ? "并列获胜" : "获胜"}`
-    : iWon ? (winners.length > 1 ? "你和别人并列获胜！" : "你赢了！") : `${winners.map((player) => player.name).join("、")} ${winners.length > 1 ? "并列获胜" : "获胜"}`;
+    : iWon ? (winners.length > 1 ? `你和${winners.filter((player) => player.id !== myId).map((player) => player.name).join("、")}并列获胜！` : "你赢了！") : `${winners.map((player) => player.name).join("、")} ${winners.length > 1 ? "并列获胜" : "获胜"}`;
   return (
     <div className="gm-modal-backdrop" role="presentation">
       <section className="gm-panel nt-final" role="dialog" aria-modal="true" aria-labelledby="nt-final-title" data-tutorial="final">
@@ -895,6 +904,7 @@ function FinalDialog({ game, room, myId, spectating, onRematch, onLeave }: {
               <img className="nt-poster-bg" src={ART.poster} alt="" width={128} height={160} />
               <img className="nt-poster-face" src={avatarArt(kings[0]!.seat)} alt="" width={64} height={64} />
               <b>牛头王</b>
+              <img className="nt-poster-king" src={ART.kingBull} alt="" width={48} height={48} />
               <span>{kings.map((player) => (player.id === myId ? "你" : player.name)).join("、")}</span>
             </div>
           )}

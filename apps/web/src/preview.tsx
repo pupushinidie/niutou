@@ -19,6 +19,7 @@
  *   &live=1       别人由人机自动选牌、选排、点继续，可以一直玩下去
  *   &pick=<牌>    进来就选中这张手牌（只抬起，不提交）
  *   &seed=<数>     发牌种子
+ *   &err=<文字>    模拟服务器拒绝了动作（看非法操作提示）
  */
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import ReactDOM from "react-dom/client";
@@ -126,7 +127,8 @@ function buildScene(): GameState {
 function BoardPreview() {
   const [theme, toggleTheme] = useTheme();
   const [full, setFull] = useState<GameState>(buildScene);
-  const [error, setError] = useState("");
+  // &err=… 模拟服务器拒绝（非法操作提示）
+  const [error, setError] = useState(params.get("err") ?? "");
   const [autoIds, setAutoIds] = useState(list("auto"));
   const [confirm, confirmDialog] = useConfirm();
   const room = useMemo(() => {

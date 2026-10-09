@@ -176,3 +176,4 @@
   .nt-room-chat { min-height: 300px; }
   .nt-room-kinds .nt-kinds { gap: 4px; }
 }
+.nt-room-seat.open .nt-room-seat-name strong { color: var(--muted); font-size: 12px; line-height: 16px; }

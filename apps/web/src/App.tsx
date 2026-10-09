@@ -31,6 +31,16 @@ function normalizeRoomCode(value: string): string {
   return value.toUpperCase().replace(/[^A-HJ-NP-Z2-9]/g, "").slice(0, 6);
 }
 
+/** 同一局里版本更低的快照是旧的（再来一局后 game 换了一局，版本从头算，不算旧）。 */
+function isStale(next: LobbyRoomSnapshot, current: LobbyRoomSnapshot | null): boolean {
+  const a = next.game;
+  const b = current?.game;
+  if (!a || !b || next.code !== current?.code) return false;
+  if (a.version >= b.version) return false;
+  // 新开的一局：版本一下子变得很小
+  return a.version + 10 > b.version;
+}
+
 type Confirm = (request: { title: string; detail: string; confirmLabel: string }) => Promise<boolean>;
 
 function App() {
@@ -69,7 +79,7 @@ function App() {
       });
     };
     const handleDisconnect = () => setConnected(false);
-    const handleRoomUpdate = (snapshot: LobbyRoomSnapshot) => setRoom(snapshot);
+    const handleRoomUpdate = (snapshot: LobbyRoomSnapshot) => setRoom((current) => (isStale(snapshot, current) ? current : snapshot));
     const handleRoomError = (message: string) => setError(message);
     const handleLobbyUpdate = (rooms: PublicRoomSummary[]) => setLobbyRooms(rooms);
     const handleRoomClosed = ({ reason }: { reason: string }) => {
@@ -190,7 +200,8 @@ function App() {
         setError(response.error);
         return;
       }
-      setRoom(response.data);
+      // 回执里的房间可能比已经收到的广播旧（人机在这期间又动了一步）：旧的不要盖掉新的
+      setRoom((current) => (isStale(response.data, current) ? current : response.data));
     });
   }
 
