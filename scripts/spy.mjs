@@ -1,5 +1,6 @@
 // 抓包：连上真实的服务器，检查服务器发给每个人的数据里有没有不该看到的东西。
-//   node scripts/spy.mjs [人数=4]            （先 npm run dev；或者 SERVER_URL=http://localhost:<端口> 指向别的服务）
+//   node scripts/spy.mjs [人数=4]            （先 npm run dev；或者 SERVER_URL=http://localhost:<端口> 指向别的服务；
+//                                             开房选项 TARGET=33 ROUNDS=3 TACTICS=1 和陪玩脚本一样）
 // 房主 A、间谍 B 和其余座位都是这个脚本里的 socket，按简单基线打完整一场（默认 66 分）；另有一个观战的人。
 // 每收到一条 room:updated 就检查：
 //   1. 任何深度都没有 deck / seed / rngState / log 字段（没发的牌和顺序、种子、随机数状态、动作序列）；
@@ -81,7 +82,12 @@ for (let index = 2; index < COUNT; index += 1) others.push(await connect(`玩家
 const viewer = await connect("观战");
 const players = [host, spy, ...others];
 
-const created = await host.emit("room:create", { name: host.name, capacity: COUNT });
+// 开房选项和陪玩脚本一样：TARGET=33 ROUNDS=3 TACTICS=1
+const options = {};
+if (process.env.TARGET) options.target = Number(process.env.TARGET);
+if (process.env.ROUNDS) options.fixedRounds = Number(process.env.ROUNDS);
+if (process.env.TACTICS === "1") options.tactics = true;
+const created = await host.emit("room:create", { name: host.name, capacity: COUNT, options });
 if (!created.ok) throw new Error(created.error);
 const code = created.data.code;
 for (const client of [spy, ...others]) {
@@ -92,7 +98,7 @@ const watching = await viewer.emit("room:join", { name: viewer.name, code, spect
 if (!watching.ok) throw new Error(watching.error);
 const started = await host.emit("room:start");
 if (!started.ok) throw new Error(started.error);
-console.log(`房间 ${code}，${COUNT} 人开局；间谍是 B，另有一个观战的人`);
+console.log(`房间 ${code}，${COUNT} 人开局（${JSON.stringify(created.data.options)}）；间谍是 B，另有一个观战的人`);
 
 // 所有座位按基线打：每次醒来看一眼最新状态，要自己做决定就做
 let seeAllOn = false;
