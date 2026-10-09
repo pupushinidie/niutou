@@ -4,7 +4,7 @@
 
 线上地址（上线后）：<https://gulugagame.com/niutou/>
 
-> 流水线状态：引擎和服务器已完成；网页现在是**调试牌桌**（把状态摆出来、每个合法动作一个按钮），正式牌桌由界面阶段做；人机已是正式策略（「普通」难度，见下文「人机」一节）。
+> 流水线状态：引擎和服务器、人机（「普通」难度）已完成；正式牌桌、首页、等候房间、预览页已由界面阶段做完（见下文「界面」一节），现在用的是美术的简洁版图片，正式美术出完后同名覆盖。
 
 ## 本地运行
 
@@ -224,9 +224,30 @@ createSceneRoom(game, opts?: {
 | `packages/game/src/bot.ts` | 人机（「普通」难度：抽样 + 推演到局末；规则 C 用已亮的牌精确算；每步一句理由） |
 | `packages/game/test/` | 规则书用例（`rulebook.test.ts`）、补充文件局面和勘误（`supplement.test.ts`）、引擎行为、隐藏信息、预览局面、随机对局（`random-*.test.ts`）；`acceptance/` 归规则核对，引擎不改 |
 | `apps/server` | Socket.IO 房间服务器；测试在 `apps/server/test`（全流程 `flow.test.ts`、真实计时 `timeouts.test.ts`、观战、挤登录、人机） |
-| `apps/web` | 网页（现在是调试牌桌 `GameBoard.tsx` + `niutou.css`，界面阶段重做） |
+| `apps/web` | 网页：首页、等候房间、牌桌、预览页（见「界面」一节） |
 | `scripts/test-bot.mjs`、`scripts/spy.mjs` | 陪玩机器人、抓包 |
 | `art/` | PixelLab 美术（美术阶段负责） |
+
+## 界面（apps/web）
+
+| 文件 | 内容 |
+|---|---|
+| `src/GameBoard.tsx` | 牌桌：顶栏、两列玩家卡（一圈）、4 排、手牌栏（提示 + 手牌 / 亮牌条 + 我的卡）、侧栏或抽屉（记录 + 聊天）、局末结算、终局 |
+| `src/layout.ts` | 按可视区域挑尺寸：4 排和手牌在 lg 3× / sm 4× / lg 2× / sm 3× / sm 2× 里挑最大能一屏放下的，全是整数倍；手机（宽 < 700）固定 sm 2×、第 6 格用窄条 |
+| `src/reveal.ts`、`src/FlyLayer.tsx` | 亮牌动画：以 `game.reveal` 为准（不看 events），翻牌 → 一张张飞进排里 → 第六张停一下、整排飞向收牌人头像、尘土、牛头冒出、飘「+N」；规则 C 选完排只放新增的几步；节奏照引擎 `ANIMATION` |
+| `src/art.ts` | 素材地址、牌图集取格子（第 n 号在 n%10 列、⌊n/10⌋ 行，0 是牌背）、10 个座位色、按房间码选场景 |
+| `src/App.tsx` | 首页 `HomeScreen`、等候房间 `RoomScreen`（加人机 / 人机标签 / 移出 / 开房选项）、开房选项 `OptionsEditor` |
+| `src/GameRules.tsx` | 规则弹窗（自己的话 + 牌图） |
+| `src/niutou.css`、`src/nt-pages.css` | 牌桌、首页和等候房间；`app-pixel.css` 是像素按钮面板（西部酒馆木色） |
+| `preview.html` + `src/preview.tsx` | 预览页：`/preview.html?s=<场景>`，参数见文件开头（`play=1&at=毫秒` 截动画中间帧、`live=1` 跟人机一直打） |
+
+- 选牌：点一张手牌（抬起、桌上出虚影、写「如果前面没人抢先：接到第 3 排第 4 张」），再点同一张 / 「确认」/ 空格才提交；提交后可「撤回」，点另一张再「改选」。←→ 挑牌，Esc 取消。
+- 规则 C：选排的人 4 排排头变成金色套索，点一排 → 「确认」（1–4 键 + 回车）；别人看到「某某正在选排」。
+- 每个动作都带 `step: stepKey(game)`。
+- 断线重连后自动用原昵称和房间码回到座位；回执比广播晚到的旧快照不会盖掉新局面。
+- 「提示」按钮（`showHint`，教程和练习局用）：`botHint` 替你选中那张牌 / 那一排并写理由，还要自己点确认。
+- 页面在后台时标题提示「【该你选牌】」「【该你选排】」。
+- `data-tutorial` 锚点：`hand`、`hand-card`、`committed-card`、`confirm`、`undo`、`confirm-row`、`continue`、`cancel-auto`、`hint-button`、`prompt`、`timer`、`round`、`rows`（选排时带 `data-tutorial-state="choosing"`）、`row-1`…`row-4`、`row-bulls`、`sixth-slot`、`seats`、`seat`、`my-seat`、`seat-status`、`seat-bulls`、`seat-total`、`reveal-strip`、`log`、`round-end`、`final`、`rematch`、`rules-button`、`room-code`、`room-players`、`room-options`、`add-bot`、`start`。
 
 ## 画面：白天版和夜间版
 
