@@ -7,7 +7,7 @@
   "scripts": {
     "build:game": "npm run build -w @niutou/game",
     "test": "vitest run",
-    "typecheck": "tsc -b && npm run typecheck -w @niutou/server && npm run typecheck -w @niutou/web",
+    "typecheck": "tsc -b && tsc -p packages/game/test/tsconfig.json && npm run typecheck -w @niutou/server && npm run typecheck -w @niutou/web",
     "predev": "npm run build:game",
     "dev": "concurrently -k -n server,web \"npm:dev:server\" \"npm:dev:web\"",
     "start": "npm run build:game && npm run start -w @niutou/server",

@@ -263,11 +263,21 @@ function applyNextRound(state: GameState, player: Player, rng: Rng, events: Game
   }
 }
 
-/** 复制状态（动作序列不复制，只共享引用：apply 不改它，runCommand 会换成新数组）。 */
+/**
+ * 复制状态，给 apply 改。引擎只会改：players 里的字段和数组、rows、reveal.steps、seenCards、history、deck，这些都复制；
+ * 引擎从不原地改的（config、亮出的牌 plays、rowsBefore、每一步 ResolveStep、历史里的每一局、finalResult、动作序列）共享引用。
+ */
 function cloneState(state: GameState): GameState {
-  const { log, ...rest } = state;
-  const next = structuredClone(rest) as GameState;
-  if (log) next.log = log;
+  const next: GameState = {
+    ...state,
+    players: state.players.map((player) => ({ ...player, hand: [...player.hand], taken: [...player.taken] })),
+    rows: state.rows.map((row) => [...row]),
+    reveal: state.reveal ? { ...state.reveal, steps: [...state.reveal.steps] } : null,
+    seenCards: [...state.seenCards],
+    history: [...state.history],
+    events: [],
+  };
+  if (state.deck) next.deck = [...state.deck];
   return next;
 }
 
