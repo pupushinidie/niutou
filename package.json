@@ -1,0 +1,24 @@
+{
+  "name": "niutou",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "workspaces": ["apps/*", "packages/*"],
+  "scripts": {
+    "build:game": "npm run build -w @niutou/game",
+    "test": "vitest run",
+    "typecheck": "tsc -b && npm run typecheck -w @niutou/server && npm run typecheck -w @niutou/web",
+    "predev": "npm run build:game",
+    "dev": "concurrently -k -n server,web \"npm:dev:server\" \"npm:dev:web\"",
+    "start": "npm run build:game && npm run start -w @niutou/server",
+    "dev:server": "npm run dev -w @niutou/server",
+    "dev:web": "npm run dev -w @niutou/web",
+    "build": "npm run build:game && npm run build -w @niutou/web"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1",
+    "typescript": "^5.9.3",
+    "tsx": "^4.20.5",
+    "vitest": "^3.2.4"
+  }
+}
