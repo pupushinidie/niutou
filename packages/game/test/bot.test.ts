@@ -9,6 +9,7 @@ import { describe, expect, it } from "vitest";
 import {
   applyCommand,
   baselineCard,
+  baselineCommand,
   baselineRow,
   buildGame,
   cardsInPlay,
@@ -151,16 +152,29 @@ describe("补充#1.10 人机最容易犯的蠢错", () => {
     expect(pickCard(keep)).not.toBe(5);
   });
 
-  it("#6 大牌趁绝对安全时打掉，不一直留着（第 4 排只有 1 张、对手只有 1 人）", () => {
-    // 2 人局：101 接在 [90] 后面，对手只能出 1 张，绝对安全；其余也都安全，但大牌越往后越难出
-    const state = buildGame({
-      players: [{ hand: [23, 41, 61, 101, 102] }, {}],
-      rows: [[20], [40], [60], [90]],
-      seed: 11,
-    });
-    const card = pickCard(state);
-    expect(card).toBeGreaterThanOrEqual(101);
-  });
+  it("#6 大牌不一直留到最后：4 人局 40 局里，95 以上的牌拖到第 9、10 手才出的比例明显低于简单基线（平均摊开是 20%）", () => {
+    const lateShare = (policy: (view: GameState, id: string) => ReturnType<typeof botCommand>) => {
+      let late = 0;
+      let total = 0;
+      for (let game = 0; game < 40; game += 1) {
+        let state = createGame([1, 2, 3, 4].map((i) => ({ id: `p${i}`, name: `${i}` })), 300 + game, { fixedRounds: 1 });
+        while (state.phase !== "gameOver") {
+          const id = waitingFor(state)[0]!;
+          const command = policy(redactGameForViewer(state, id), id)!;
+          if (command.type === "select" && command.card >= 95) {
+            total += 1;
+            if (state.turn >= 9) late += 1;
+          }
+          state = applyCommand(state, id, command);
+        }
+      }
+      return late / total;
+    };
+    const bot = lateShare(botCommand);
+    const baseline = lateShare(baselineCommand);
+    expect(bot).toBeLessThan(0.2);
+    expect(bot).toBeLessThan(baseline - 0.1);
+  }, 60_000);
 
   it("#8 分差很小的几张里随机挑：同一局面结果固定（可复现），不同局面会变；放宽 tie 时会挑不同的牌", () => {
     const state = buildGame({ players: [{ hand: [23, 41, 61, 81] }, {}, {}], rows: [[20], [40], [60], [80]] });

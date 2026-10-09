@@ -4,7 +4,7 @@
 
 线上地址（上线后）：<https://gulugagame.com/niutou/>
 
-> 流水线状态：引擎和服务器已完成；网页现在是**调试牌桌**（把状态摆出来、每个合法动作一个按钮），正式牌桌由界面阶段做；人机现在是占位（随机合法动作），由人机阶段换成正式策略。
+> 流水线状态：引擎和服务器已完成；网页现在是**调试牌桌**（把状态摆出来、每个合法动作一个按钮），正式牌桌由界面阶段做；人机已是正式策略（「普通」难度，见下文「人机」一节）。
 
 ## 本地运行
 
@@ -53,7 +53,7 @@ BASE_PATH=/niutou/ npm run build
 | 自选手牌、专家（两端都能接）变体 | 不做 | 开工拍板 |
 | 局末怎么开下一局 | 进入 `roundEnd`：大家都点「继续」（`nextRound`）就马上发下一局；没点齐的话，最后一手的动画放完后再停 5 秒自动发。人机自动点继续 | 规则书 9.2 建议「5 秒后自动」，这里加了「都点了就不等」 |
 | 选牌超时（30 秒） | 系统按「简单基线」替没选的人出牌：有能安全接上的牌（规则 A 有目标排、目标排不到 5 张）就出其中离排尾最近的（一样近出小的），没有就出最小的。不是规则书 9.4 的「出最小的牌」 | 开工拍板，补充文件 1.7 / 1.11 |
-| 规则 C 选排超时（20 秒） | 牛头最少 → 排尾最大 → 排号最小（规则书 9.4 的第二比较项是「张数最少」，这里按勘误第 5 条换成「排尾最大」） | 开工拍板，补充文件勘误 3.2-5 |
+| 规则 C 选排超时（20 秒） | 按人机算法替他选（用已亮出、还没结算的牌把 4 种选法各算一遍，收得少、后面好打的优先）；人机出错时退回基线：牛头最少 → 排尾最大 → 排号最小 | 开工拍板（「选排超时按人机算法选」），补充文件 1.5 / 勘误 3.2-5 |
 | 计时从什么时候算 | 每一步的限时加上刚才那一步的结算动画（亮牌 1.2 秒、每张接上去 0.7 秒、每次收牌 2 秒），所以玩家看完动画后还有完整的 30 / 20 / 5 秒 | 自定 |
 | 托管 | 全站约定覆盖规则书：真人在选牌或选排上连续超时 2 次转托管，由人机代打（不是默认动作），自己动一下或点「取消托管」交还；局末没点「继续」不算超时。离线的人先等 3 秒再由人机代打（不算超时），用原昵称回来就交还 | 全站约定 |
 | 人机 | 房主在空座位点「加人机」（咕噜一号…九号）；一个人加满人机也能开局；人机总是同意再来一局 | 全站约定 |
@@ -65,12 +65,12 @@ BASE_PATH=/niutou/ npm run build
 | 步骤 | 限时 | 超时怎么办 | 记超时吗 |
 |---|---|---|---|
 | 选牌（所有人同时） | 30 秒 + 上一手结算动画 | 替所有还没选的人按基线出牌，选齐就亮牌 | 记（真人） |
-| 规则 C 选排 | 20 秒 + 亮牌动画 | 替 chooser 按基线选排，接着结算 | 记（真人） |
+| 规则 C 选排 | 20 秒 + 亮牌动画 | 替 chooser 按人机算法选排（出错退回基线），接着结算 | 记（真人） |
 | 局末 | 5 秒 + 最后一手动画 | 替没点的人点「继续」，发下一局 | 不记 |
 
 - 计时 key 是 `stepKey(game)` = `局:手:阶段`，只在换手、进入 / 离开 chooseRow、局末时变。选牌是大家同时做的「轮外操作」：别人选牌、撤回、改选都不会重置倒计时（有测试）。
 - 人机座位、托管、离线的人各有一个计时器，等这一步的动画放完再「想」1–3.5 秒（离线至少等 3 秒）后由人机替他做。人机给出不合法的动作时退回基线，不会卡住。
-- 超时代打用哪个策略在 `apps/server/src/index.ts` 的 `timeoutPolicy`（现在是 `baselineCommand`）；人机阶段要换成正式策略只改这一行。
+- 单次超时代打的策略在 `apps/server/src/index.ts` 的 `timeoutPolicy`：选牌按简单基线（简单、好解释，也不会比自己打得还好、让人故意挂机），规则 C 选排按人机算法。连续 2 次超时转托管后、以及离线时，都由正式人机 `botCommand` 代打。
 
 ## 对外接口
 
@@ -123,7 +123,7 @@ BASE_PATH=/niutou/ npm run build
 - 引擎：`createGame(players, seed?, options?, overrides?)`、`apply(state, 座位, 动作, rng)`（纯函数，不改输入）、`applyCommand(state, 座位, 动作, { auto? })`（服务器用，rng 存在 state 里；`auto` 表示托管 / 离线时人机代做，规则 C 那一步会标 `auto`）、`timeoutTurn(state, policy?)`、`legalActions`、`waitingFor`、`stepKey`、`normalizeCommand`、`normalizeOptions`、`redactGameForViewer(state, 座位)`、`redactGameForSpectator(state, seeAll)`。
 - 检查：`stateProblems(state)` 查一个服务端状态像不像真实对局（牌守恒、桌上的牌数和第几手对得上、本局牛头 = 收牌堆、累计 = 各局之和、各阶段约束、等着的人有合法动作），返回问题列表。`buildGame` 不强制这些，造完可以拿它查；所有命名场景都通过。
 - 基线：`baselineCommand(视角, 座位)`、`baselineCard(hand, rows)`、`baselineRow(rows)`（超时代打和人机对照用）。
-- 人机：`botCommand(视角, 座位)`（现在是占位，人机阶段换掉）。
+- 人机：`botCommand(视角, 座位, options?)` 返回动作；`botDecision(视角, 座位)` / `botHint`（同一个函数）返回 `{ command, reason, detail? }`，`reason` 是一句玩家听得懂的理由，教程「提示」按钮用；没有要它做的事返回 `null`。视角必须是 `redactGameForViewer(game, 座位)` 之后的状态。`botUnknownCards(视角, 座位)`：这个座位看不到的牌（测试用）。
 
 ### 预览局面工厂（`scenes.ts`）
 
@@ -210,7 +210,7 @@ createSceneRoom(game, opts?: {
 | `packages/game/src/engine.ts` | 规则引擎：发牌、选牌 / 撤回、亮牌结算、规则 C 停下选排、局末、终局、超时代做、隐藏信息 |
 | `packages/game/src/baseline.ts` | 简单基线（超时代打） |
 | `packages/game/src/scenes.ts` | 预览局面工厂 |
-| `packages/game/src/bot.ts` | 人机（现在是占位，人机阶段负责） |
+| `packages/game/src/bot.ts` | 人机（「普通」难度：抽样 + 推演到局末；规则 C 用已亮的牌精确算；每步一句理由） |
 | `packages/game/test/` | 规则书用例（`rulebook.test.ts`）、补充文件局面和勘误（`supplement.test.ts`）、引擎行为、隐藏信息、预览局面、随机对局（`random-*.test.ts`）；`acceptance/` 归规则核对，引擎不改 |
 | `apps/server` | Socket.IO 房间服务器；测试在 `apps/server/test`（全流程 `flow.test.ts`、真实计时 `timeouts.test.ts`、观战、挤登录、人机） |
 | `apps/web` | 网页（现在是调试牌桌 `GameBoard.tsx` + `niutou.css`，界面阶段重做） |

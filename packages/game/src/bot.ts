@@ -42,6 +42,8 @@ export interface BotOptions {
   readonly oppFirst: "baseline" | "quick";
   /** 快速打法里「先出大牌」的分量。 */
   readonly urgency: number;
+  /** 保险丝：抽够 minWorlds 个世界以后，一步已经算了这么多毫秒就停（服务器忙的时候不拖慢别的房间）。 */
+  readonly maxMs: number;
 }
 
 export const DEFAULT_BOT_OPTIONS: BotOptions = {
@@ -52,10 +54,11 @@ export const DEFAULT_BOT_OPTIONS: BotOptions = {
   leaderWeight: 0,
   tie: 0.3,
   depth: Infinity,
-  selfPolicy: "baseline",
-  oppPolicy: "baseline",
+  selfPolicy: "quick",
+  oppPolicy: "quick",
   oppFirst: "baseline",
   urgency: 0.3,
+  maxMs: 60,
 };
 
 /** 人机的一个决定：动作 + 一句玩家听得懂的理由；detail 给测试和调试看。 */
@@ -101,6 +104,7 @@ function hashState(view: GameState, playerId: string, hand: readonly number[]): 
   return h >>> 0;
 }
 
+const now = () => globalThis.performance?.now() ?? Date.now();
 const rowNo = (row: number) => `第 ${row + 1} 排`;
 const tailOf = (row: readonly number[]) => row[row.length - 1]!;
 
@@ -375,7 +379,11 @@ function evaluateCards(ctx: Context): { stats: CardStats[]; worlds: number } {
   const worlds = worldCount(ctx, ctx.hand.length);
   const stats: CardStats[] = ctx.hand.map((card) => ({ card, score: 0, takeProb: 0, takeBulls: 0 }));
   const pen: number[] = new Array(ctx.n).fill(0);
+  const start = now();
+  let done = 0;
   for (let w = 0; w < worlds; w += 1) {
+    if (w >= ctx.opts.minWorlds && now() - start > ctx.opts.maxMs) break;
+    done += 1;
     const world = sampleWorld(ctx);
     // 对手这一手出什么只取决于他们的手牌和现在的 4 排，和我出什么无关：每个世界算一次
     const oppCards: number[] = [];
@@ -409,11 +417,11 @@ function evaluateCards(ctx: Context): { stats: CardStats[]; worlds: number } {
     }
   }
   for (const stat of stats) {
-    stat.score /= worlds;
-    stat.takeProb /= worlds;
-    stat.takeBulls /= worlds;
+    stat.score /= done;
+    stat.takeProb /= done;
+    stat.takeBulls /= done;
   }
-  return { stats, worlds };
+  return { stats, worlds: done };
 }
 
 /** 缺口里还可能被别人出的牌有几张（补充文件 1.2 的 g）。 */
@@ -511,7 +519,11 @@ function decideChooseRow(ctx: Context): BotDecision {
   const worlds = ctx.hand.length > 0 ? worldCount(ctx, 4) : 0;
   const pen: number[] = new Array(ctx.n).fill(0);
   for (const option of options) option.score = 0;
+  const start = now();
+  let done = 0;
   for (let w = 0; w < worlds; w += 1) {
+    if (w >= ctx.opts.minWorlds && now() - start > ctx.opts.maxMs) break;
+    done += 1;
     const world = sampleWorld(ctx);
     for (const option of options) {
       const rows = option.after.map((cards) => [...cards]);
@@ -522,7 +534,7 @@ function decideChooseRow(ctx: Context): BotDecision {
       option.score += objective(ctx, pen);
     }
   }
-  for (const option of options) option.score = worlds > 0 ? option.score / worlds : objective(ctx, option.handPen);
+  for (const option of options) option.score = done > 0 ? option.score / done : objective(ctx, option.handPen);
 
   // 补充文件 1.5：收得少、后面好打优先；再一样（差不到 0.05）让领先者多收 → 排尾最大 → 排号最小
   const sorted = [...options].sort((a, b) => {
@@ -537,7 +549,7 @@ function decideChooseRow(ctx: Context): BotDecision {
   return {
     command: { type: "chooseRow", row: chosen.row },
     reason: chooseRowReason(ctx, chosen, options),
-    detail: { scores: Object.fromEntries(options.map((option) => [option.row, option.score])), worlds },
+    detail: { scores: Object.fromEntries(options.map((option) => [option.row, option.score])), worlds: done },
   };
 }
 
