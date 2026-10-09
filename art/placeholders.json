@@ -1,0 +1,268 @@
+{
+ "cards/cards-sm.png": {
+  "size": [
+   280,
+   418
+  ],
+  "sha256": "ac4be8645c63b3b86f485c5cf2c5a56d5002531d9921627577a5d6cc52c331da"
+ },
+ "cards/cards-lg.png": {
+  "size": [
+   420,
+   638
+  ],
+  "sha256": "77a0a7fdf2423859c218445db1c203a56278080c3e59b14966e12a1c8fe52576"
+ },
+ "cards/slot-sm.png": {
+  "size": [
+   28,
+   38
+  ],
+  "sha256": "df0818a746c244a7cdcdd5adaf7b067ab4b70e0d16ed3cdad4bf918b14445b6f"
+ },
+ "cards/slot-lg.png": {
+  "size": [
+   42,
+   58
+  ],
+  "sha256": "8c2654cdfa817881dba269931dd151f0cc0f9785a8dfd826a41ed3d7ec28d420"
+ },
+ "cards/danger-sm.png": {
+  "size": [
+   28,
+   38
+  ],
+  "sha256": "c429497a3e6eac4f21a0f5e471b5b78fcca6fa38d23d70712eb599038f61b095"
+ },
+ "cards/danger-lg.png": {
+  "size": [
+   42,
+   58
+  ],
+  "sha256": "69a485794c46087138d26b173cd0cc3293578744348850a8cc64f149a8838835"
+ },
+ "cards/danger-strip-sm.png": {
+  "size": [
+   14,
+   38
+  ],
+  "sha256": "f35257a16d1619b1c2e42dbac0a399e1dd64079af3b76ca511c82ff1c2767696"
+ },
+ "table/felt.png": {
+  "size": [
+   64,
+   64
+  ],
+  "sha256": "bbfcf986845ab600adea565cae104e3c5e82d0179e6ceaeb1b25605c54c81a73"
+ },
+ "table/rim.png": {
+  "size": [
+   24,
+   24
+  ],
+  "sha256": "d6cd70f0ed72bdc694a0122252ad84bcf43ac7bf8b999223ae65008175a6feb4"
+ },
+ "scene/night-0.png": {
+  "size": [
+   512,
+   288
+  ],
+  "sha256": "b00286e49e4095fbc315cd973570f4a885731ef50945009361bfd8d0cd82ed60"
+ },
+ "scene/night-1.png": {
+  "size": [
+   512,
+   288
+  ],
+  "sha256": "26dc09bc0bac1beffaf6c7969a8abaa600362e2dc863dd37ddae62087786848a"
+ },
+ "scene/day-0.png": {
+  "size": [
+   512,
+   288
+  ],
+  "sha256": "0849a8ce1319c66aab164ac006f7376e40c73b77bd9799977b7857b618a863b7"
+ },
+ "scene/day-1.png": {
+  "size": [
+   512,
+   288
+  ],
+  "sha256": "64838a0d594d0884cf3e0e10807e8cffd6a96ba6e7ad1bbb28d484f123435a64"
+ },
+ "scene/hero.png": {
+  "size": [
+   512,
+   288
+  ],
+  "sha256": "4f0b187659982cd93a4ccda753d241b4c8adb897ee25738e4d8e8e8dd3757204"
+ },
+ "ui/head-16.png": {
+  "size": [
+   16,
+   16
+  ],
+  "sha256": "045bc6ecce0a19cad77e16d2a7a97e1950d930ddb05a991e7f9b2e02b721482e"
+ },
+ "ui/head-32.png": {
+  "size": [
+   32,
+   32
+  ],
+  "sha256": "ef9b0686d4f113b3a928599e3f9320599eac1fadec0037c59b34e166f7b1e939"
+ },
+ "ui/ready.png": {
+  "size": [
+   16,
+   16
+  ],
+  "sha256": "2102b82bb251ab2eccd7c8dc5250fc2beac34c2a9ecb613c1204c4dd9e4ffc9b"
+ },
+ "ui/lasso.png": {
+  "size": [
+   16,
+   16
+  ],
+  "sha256": "b5f384ff42d6aa139d1b218834d05114dcb6b8f8cae0ffb6d80989a7ba2a6455"
+ },
+ "ui/sheriff-star.png": {
+  "size": [
+   32,
+   32
+  ],
+  "sha256": "9df82282437559a7b1dccebdc7906f45da365899752bbbe438b275d1191f6c5e"
+ },
+ "ui/king-bull.png": {
+  "size": [
+   48,
+   48
+  ],
+  "sha256": "ce3e5d921df2757adaaa4d1dc788b01fd7293ec8976755eb09316fce2020ac59"
+ },
+ "ui/poster.png": {
+  "size": [
+   64,
+   80
+  ],
+  "sha256": "4d7bbca8199313659a340c31537f932960f749c45cdbb7f884d6ece0a4c5239c"
+ },
+ "ui/thinking.png": {
+  "size": [
+   64,
+   16
+  ],
+  "sha256": "a7707587e04607af14923942f867cdec3d7b0cecaf63890fe2536134eb07a59c"
+ },
+ "avatars/avatar-0.png": {
+  "size": [
+   32,
+   32
+  ],
+  "sha256": "f1fb841a26e9b08afe223b990d50995ae7a32d52a5905e6bbf1a28f640b6ba4b"
+ },
+ "avatars/avatar-1.png": {
+  "size": [
+   32,
+   32
+  ],
+  "sha256": "aedd15468f7e268d3f7e55a32485962c85535ed67057bb05e1bb5c58987d5f63"
+ },
+ "avatars/avatar-2.png": {
+  "size": [
+   32,
+   32
+  ],
+  "sha256": "600002e5db1d22b44b744f7102da9740342cb65e2099b5743d15ad017d6a667e"
+ },
+ "avatars/avatar-3.png": {
+  "size": [
+   32,
+   32
+  ],
+  "sha256": "876b3b02560d618dc60dfcb812bb042e6b21687c941f908fad327ed261982ad4"
+ },
+ "avatars/avatar-4.png": {
+  "size": [
+   32,
+   32
+  ],
+  "sha256": "a10d5706f10b4caf3844976f5417e8c48da7d39975ab52031679ef45354c448f"
+ },
+ "avatars/avatar-5.png": {
+  "size": [
+   32,
+   32
+  ],
+  "sha256": "3ea5d47b3971ff2c071e0211be8c4a23410cc0d0fb26d63c77d2b9f02fe8906f"
+ },
+ "avatars/avatar-6.png": {
+  "size": [
+   32,
+   32
+  ],
+  "sha256": "eff632f03100499992405174436b5d885dd09c226480a1f57d5536373c6ab915"
+ },
+ "avatars/avatar-7.png": {
+  "size": [
+   32,
+   32
+  ],
+  "sha256": "e0fac9dabc5f43b4820565bd27359cbdbebf1cdc94d538c1cbaa70d883a6907a"
+ },
+ "avatars/avatar-8.png": {
+  "size": [
+   32,
+   32
+  ],
+  "sha256": "bd6cef8b02dbaad7bde6139b0f2c2ea82b60bbec64d6e534009363925907237b"
+ },
+ "avatars/avatar-9.png": {
+  "size": [
+   32,
+   32
+  ],
+  "sha256": "44b1e2783957cb75f4db2f68f0505815685f931172a4d2ae9ebf0aaa86790f6d"
+ },
+ "fx/dust.png": {
+  "size": [
+   192,
+   32
+  ],
+  "sha256": "bf97ddac9fc53dc338935dafb5af91d6f876e703a10a025b5509328b9d246c33"
+ },
+ "fx/heads-pop.png": {
+  "size": [
+   192,
+   32
+  ],
+  "sha256": "4c006ebc259862c22f456d52f87915ff6b3a71c812afb12034b0adfb153fdf02"
+ },
+ "fx/sparkle.png": {
+  "size": [
+   96,
+   16
+  ],
+  "sha256": "76a0bb7dbabfb8a86c788b3fbf54a6c644857d1bd571d4977e5bb7419d9072b4"
+ },
+ "fx/lamp.png": {
+  "size": [
+   64,
+   32
+  ],
+  "sha256": "8b3460aa2cd923b02d85d2f3aeb88e75f3dc04f469d14f88f502479b5f92b359"
+ },
+ "sprites/calf-run.png": {
+  "size": [
+   192,
+   32
+  ],
+  "sha256": "1e8381ff7120adf204e86e85425dd648f3217d3642fba3eea37d2c780ca47b5a"
+ },
+ "sprites/tumbleweed.png": {
+  "size": [
+   192,
+   24
+  ],
+  "sha256": "fba8c83288b3e2602cd1cfc446cd0211e8d2aef3cc085dc2968a148429a9318f"
+ }
+}
