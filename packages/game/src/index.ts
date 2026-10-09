@@ -20,7 +20,8 @@ export {
 } from "./engine.js";
 export type { NewPlayer, TimeoutPolicy } from "./engine.js";
 export { baselineCard, baselineCommand, baselineRow } from "./baseline.js";
-export { botCommand } from "./bot.js";
+export { botCommand, botDecision, botHint, botUnknownCards, DEFAULT_BOT_OPTIONS } from "./bot.js";
+export type { BotDecision, BotOptions } from "./bot.js";
 export {
   autoPlayHands,
   buildGame,
