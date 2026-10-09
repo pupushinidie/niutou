@@ -1,0 +1,14 @@
+{"time": "2026-10-09 16:45:04", "name": "night-s32", "endpoint": "/create-image-pixen", "usage": {"type": "usd", "usd": 0.011516762971878052}, "seconds": 655.5}
+{"time": "2026-10-09 16:46:16", "name": "night-s35", "endpoint": "/create-image-pixen", "usage": {"type": "usd", "usd": 0.0103030067814721}, "seconds": 71.5}
+{"time": "2026-10-09 16:47:35", "name": "night-s36", "endpoint": "/create-image-pixen", "usage": {"type": "usd", "usd": 0.01032299542427063}, "seconds": 79.3}
+{"time": "2026-10-09 16:48:29", "name": "night-s37", "endpoint": "/create-image-pixen", "usage": {"type": "usd", "usd": 0.00996818561024136}, "seconds": 54.3}
+{"time": "2026-10-09 16:50:25", "name": "night-s38", "endpoint": "/create-image-pixen", "usage": {"type": "usd", "usd": 0.0141416175365448}, "seconds": 115.1}
+{"time": "2026-10-09 16:53:12", "name": "night-s39", "endpoint": "/create-image-pixen", "usage": {"type": "usd", "usd": 0.010524096250534059}, "seconds": 167.5}
+{"time": "2026-10-09 16:53:54", "name": "s32-fix-left-901", "endpoint": "/create-image-bitforge", "usage": {"type": "usd", "usd": 0.008707400533888075}, "seconds": 41.5}
+{"time": "2026-10-09 16:54:45", "name": "s32-fix-left-902", "endpoint": "/create-image-bitforge", "usage": {"type": "usd", "usd": 0.011197147382630241}, "seconds": 51.6}
+{"time": "2026-10-09 17:16:22", "name": "s32-fix-right-901", "endpoint": "/create-image-bitforge", "usage": {"type": "usd", "usd": 0.0119411218629943}, "seconds": 1296.5}
+{"time": "2026-10-09 17:17:02", "name": "s32-fix-right-902", "endpoint": "/create-image-bitforge", "usage": {"type": "usd", "usd": 0.008776966174443563}, "seconds": 40.7}
+{"time": "2026-10-09 17:18:25", "name": "day-s45", "endpoint": "/create-image-pixen", "usage": {"type": "usd", "usd": 0.01130602749188741}, "seconds": 83.0}
+{"time": "2026-10-09 17:19:35", "name": "day-s46", "endpoint": "/create-image-pixen", "usage": {"type": "usd", "usd": 0.010009043640560576}, "seconds": 69.6}
+{"time": "2026-10-09 17:21:16", "name": "day-s47", "endpoint": "/create-image-pixen", "usage": {"type": "usd", "usd": 0.012866080734464859}, "seconds": 100.9}
+{"time": "2026-10-09 17:25:06", "name": "day-s48", "endpoint": "/create-image-pixen", "usage": {"type": "usd", "usd": 0.027703388426038957}, "seconds": 230.5}

@@ -2,8 +2,13 @@
 
 > 美术规格阶段写，出图阶段照这个出、美术评审照这个审、界面照这个排。
 > **文件名、原始尺寸、帧数定了就不改**；非改不可时先改这里，在交接报告里写明并记 `gpipe note`。
-> 所有文件都在 `apps/web/public/art/` 下，现在是占位图（`art/placeholders.py` 生成，哈希记在 `art/placeholders.json`）。
-> 出图定稿后跑 `python art/placeholders.py --check`：「还是占位图」「缺文件」「尺寸不一样」三项都要是 0。
+> 所有文件都在 `apps/web/public/art/` 下。
+>
+> **简洁版和正式版（2026-10-09 流程）**
+> - `public/art/` 里现在是**简洁版**：`art/lite.py` 全部用代码画（牌面、酒馆场景、动物头像、图标、特效帧），不含任何文字，能直接上线。首发验收和首发上线都用它。
+> - 正式美术（PixelLab）定稿后先放 `art/out/final/`，路径和文件名照本 spec（例如 `art/out/final/scene/night-0.png`），**不覆盖 public**；首发上线后制作人通知了，才把 final/ 覆盖进 `public/art/`，再做换图验收。
+> - `art/placeholders.json` 记着简洁版每个文件的哈希（`kind: "lite"`）。`python art/placeholders.py --check` 列出「还是简洁版」「缺文件」「尺寸不一样」，换图验收时三项都要是 0。
+> - 最早的色块占位图（`placeholders.py --legacy`）已经不用了。
 
 ## 1. 风格方向（开工拍板：西部酒馆，不许换）
 
@@ -227,6 +232,8 @@ export const sceneFor = (room: string, theme: "night" | "day") => {
 图片地址固定，换图后靠服务器给 `/art/` 加 `Cache-Control: no-cache`（模板已有）。
 
 ## 8. 出图阶段的做法（预计 $3–6，开工样张已花 $0.27）
+
+定稿放 `art/out/final/<spec 路径>`，见文件开头。
 
 | 素材 | 做法 | 候选 |
 |---|---|---|

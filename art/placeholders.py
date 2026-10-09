@@ -6,9 +6,10 @@
 - 生成后把每个文件的 sha256 写进 art/placeholders.json。出图定稿后跑 `--check`，
   还和占位哈希一样的文件会被列出来（换图验收要求一个都没有）。
 
+2026-10-09 起 public/art 里放的是 art/lite.py 画的「简洁版」（能直接上线），哈希表也由它写（kind = "lite"）。
 用法：
-  ~/miniconda3/envs/quant/bin/python art/placeholders.py          # 生成
-  ~/miniconda3/envs/quant/bin/python art/placeholders.py --check  # 列出还是占位的文件
+  ~/miniconda3/envs/quant/bin/python art/placeholders.py --legacy # 重画最早的色块占位（会覆盖简洁版）
+  ~/miniconda3/envs/quant/bin/python art/placeholders.py --check  # 列出还是简洁版 / 占位的文件
   ~/miniconda3/envs/quant/bin/python art/placeholders.py --sheet  # 另存一张总览到 art/out/（不进仓库）
 """
 from __future__ import annotations
@@ -491,7 +492,8 @@ def check() -> int:
                 wrong.append(f"{rel} 是 {im.size[0]}×{im.size[1]}，spec 要 {info['size'][0]}×{info['size'][1]}")
         if sha(path) == info["sha256"]:
             still.append(rel)
-    for title, items in (("还是占位图", still), ("缺文件", missing), ("尺寸和 spec 不一样", wrong)):
+    kind = "简洁版" if any(v.get("kind") == "lite" for v in manifest.values()) else "占位图"
+    for title, items in ((f"还是{kind}（没被正式图替换）", still), ("缺文件", missing), ("尺寸和 spec 不一样", wrong)):
         print(f"{title}：{len(items)}")
         for item in items:
             print("  ", item)
@@ -524,5 +526,8 @@ if __name__ == "__main__":
         sys.exit(check())
     if "--sheet" in sys.argv:
         sheet()
-    else:
+    elif "--legacy" in sys.argv:
         generate()
+    else:
+        print("public/art 现在放的是简洁版（art/lite.py 生成，能直接上线）。这个脚本只剩 --check；"
+              "真要重画最早的色块占位图，加 --legacy（会覆盖简洁版和哈希表）。")
