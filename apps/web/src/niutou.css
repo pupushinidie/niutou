@@ -294,7 +294,7 @@
 .nt-poster { position: relative; flex: 0 0 auto; width: 128px; height: 160px; }
 .nt-poster-bg { position: absolute; inset: 0; }
 .nt-poster-face { position: absolute; left: 32px; top: 46px; }
-.nt-poster-king { position: absolute; right: -16px; bottom: -8px; }
+.nt-poster-king { position: absolute; right: -24px; top: -16px; }
 .nt-poster b { position: absolute; left: 0; right: 0; top: 10px; color: #7a2a22; font-size: 24px; font-weight: 400; text-align: center; line-height: 1; }
 .nt-poster span { position: absolute; left: 4px; right: 4px; top: 118px; color: #2a1a10; font-size: 12px; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .nt-rematch { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; color: var(--muted); font-size: 12px; }
@@ -420,7 +420,7 @@
   .nt-final .nt-poster-face { left: 16px; top: 23px; width: 32px; height: 32px; }
   .nt-final .nt-poster b { top: 4px; font-size: 12px; }
   .nt-final .nt-poster span { top: 60px; }
-  .nt-final .nt-poster-king { width: 48px; height: 48px; right: -12px; bottom: -12px; }
+  .nt-final .nt-poster-king { display: none; }
   .nt-final .nt-star, .nt-final .nt-star img { width: 32px; height: 32px; }
   .nt-final .nt-rematch { position: sticky; bottom: -14px; margin: 8px -12px -14px; padding: 8px 12px; background: var(--panel); box-shadow: 0 calc(var(--px) * -1) 0 0 #4a3020; }
   .nt-final .nt-mini-avatar, .nt-final .nt-mini-avatar img { width: 32px; height: 32px; }
@@ -429,3 +429,8 @@
 .app-shell .gm-panel.nt-final .nt-rematch { position: sticky; bottom: -22px; margin: 8px -24px -22px; padding: 10px 24px; background: var(--panel); box-shadow: 0 calc(var(--px) * -1) 0 0 #4a3020; }
 .nt-final.many .nt-score-table td { padding: 1px 6px; }
 .nt-final.many .nt-final-head .nt-poster { transform: scale(0.75); transform-origin: top right; margin-bottom: -40px; }
+
+/* 终局标题折行时，警徽和闪光对齐第一行、闪光放在警徽左上（不压标题字） */
+.nt-final-head { align-items: flex-start; }
+.nt-final-head .nt-star { margin-top: 4px; }
+.nt-final-head .nt-sparkle { right: auto; left: -10px; top: -10px; }
