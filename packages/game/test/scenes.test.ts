@@ -146,3 +146,18 @@ describe("预览局面#房间快照", () => {
     expect(createSceneRoom(createScene("roundEnd"), { turnRemainingMs: 1234 }).turnRemainingMs).toBe(1234);
   });
 });
+
+describe("预览局面#和引擎的不变量一致", () => {
+  it("buildGame 编的 history 有 round − 1 条，累计 = 各局之和", () => {
+    const state = buildGame({ players: [{ total: 20 }, { total: 7 }], round: 3 });
+    expect(state.history).toHaveLength(2);
+    for (const player of state.players) {
+      expect(state.history.reduce((sum, result) => sum + (result.bulls[player.id] ?? 0), 0)).toBe(player.total);
+    }
+  });
+
+  it("2 人局的 selectSome：对手已选、我没选", () => {
+    const state = createScene("selectSome", { players: 2 });
+    expect(state.players.map((player) => player.selected)).toEqual([false, true]);
+  });
+});

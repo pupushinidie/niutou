@@ -134,14 +134,13 @@ export function buildGame(spec: ExactSpec): GameState {
   if (new Set(players.map((player) => player.id)).size !== players.length) throw new Error("玩家 id 重复。");
   if (players.every((player) => player.selected)) throw new Error("所有人都选好了就该亮牌：先少给一个人的 selection，再用 playHand。");
   const round = spec.round ?? 1;
+  // 没给 history 时编 round − 1 条：累计都算在第 1 局，之后各局 0 分（这样「累计 = 各局之和」照样成立）
   const history = spec.history
-    ?? (round > 1
-      ? [{
-          round: round - 1,
-          bulls: Object.fromEntries(players.map((player) => [player.id, player.total])),
-          totals: Object.fromEntries(players.map((player) => [player.id, player.total])),
-        }]
-      : []);
+    ?? Array.from({ length: round - 1 }, (_, index) => ({
+      round: index + 1,
+      bulls: Object.fromEntries(players.map((player) => [player.id, index === 0 ? player.total : 0])),
+      totals: Object.fromEntries(players.map((player) => [player.id, player.total])),
+    }));
   const seenCards = [...rows.flat(), ...players.flatMap((player) => player.taken)].sort((a, b) => a - b);
   return {
     config,
@@ -308,7 +307,8 @@ export function createScene(name: SceneName, opts: SceneOptions = {}): GameState
     case "opening":
       return opening();
     case "selectSome":
-      return select(opening(), ["p2", "p3"].filter((id) => Number(id.slice(1)) <= count - 1));
+      // 我（p1）没选；p2 起选好一部分（2 人局就是对手已选）
+      return select(opening(), names(count).slice(1, Math.max(2, count - 1)).map((player) => player.id!));
     case "selectedMine":
       return select(opening(), ["p1", "p3"].filter((id) => Number(id.slice(1)) <= Math.max(1, count - 1)));
     case "waitingOne":
