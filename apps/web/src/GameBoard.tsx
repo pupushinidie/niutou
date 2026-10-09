@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import {
-  botHint,
   bullheads,
   legalActions,
   stepKey,
@@ -31,6 +30,9 @@ import { pickLayout, seatColumns, type Layout, type SeatSize } from "./layout.js
 import { boardFrame, useRevealPlayback, type PlaybackOptions } from "./reveal.js";
 import { GameRoomMenu } from "./RoomExtras.js";
 import { socket } from "./socket.js";
+import { Coach, TipToast } from "./tutorial/Coach.js";
+import { useFirstTimeTips } from "./tutorial/tips.js";
+import { detectTips, GAME_ID, hintFor, TIPS, type Hint } from "./tutorial/tutorialGame.js";
 
 /**
  * 正式牌桌。布局见 layout.ts；亮牌动画见 reveal.ts / FlyLayer.tsx。
@@ -59,8 +61,21 @@ interface GameBoardProps {
   readonly onLeave: () => void;
   /** 预览页用：第一次渲染也放亮牌动画、把动画时钟停在某一刻。 */
   readonly playback?: PlaybackOptions;
-  /** 显示「提示」按钮（教程、练习局用）：人机给一句理由，并替你选中那张牌 / 那一排（还要你自己点确认）。 */
+  /**
+   * 预览页用：强制显示「提示」按钮。正常情况下「提示」只在练习局（mode="practice"）和「只有自己和人机」的房间里出现：
+   * 人机给一句理由，并替你选中那张牌 / 那一排（还要你自己点确认）。
+   */
   readonly showHint?: boolean;
+  /** 自己在 room.members 里的 id；默认 socket.id。新手教程在本地拼房间，传固定值。 */
+  readonly selfMemberId?: string;
+  /**
+   * online：真实对局（默认）；
+   * tutorial：新手教程的剧本进行中（咕噜嘎在讲，不出提示和小贴士）；
+   * practice：教程后的练习局（随时能用「提示」）。
+   */
+  readonly mode?: "online" | "tutorial" | "practice";
+  /** 终局弹窗里替代「再来一局」的按钮（练习局：结束教程 / 再练一局）。 */
+  readonly finalActions?: ReactNode;
 }
 
 const ROW_LABEL = ["第 1 排", "第 2 排", "第 3 排", "第 4 排"];
@@ -169,7 +184,7 @@ function Seat({ player, member, bulls, total, status, isMe, active, size, compac
     <div
       className={`nt-seat ${size}${compact ? " compact" : ""}${active ? " active" : ""}${offline ? " offline" : ""}${isMe ? " me" : ""}`}
       style={{ "--seat": seatColor(player.seat), "--seat-ink": seatInk(player.seat) } as CSSProperties}
-      data-tutorial={isMe ? "my-seat" : "seat"}
+      data-tutorial={isMe ? "my-seat" : `seat:${player.id}`}
       data-player={player.id}
     >
       <div className="nt-avatar" data-avatar={player.id} style={{ width: avatarPx, height: avatarPx }}>
@@ -210,6 +225,7 @@ interface LogLine {
 
 function GameBoard(props: GameBoardProps) {
   const { room, busy, error, notice, brand, connection, themeToggle, theme, chat, onCommand: sendCommand, onRematch, onAuto, onDissolve, watchId, onWatch, onLeave } = props;
+  const { selfMemberId, mode = "online", finalActions } = props;
   const game = room.game!;
   const viewport = useViewport();
   const layout = useMemo(() => pickLayout(viewport.w, viewport.h), [viewport.w, viewport.h]);
@@ -221,7 +237,7 @@ function GameBoard(props: GameBoardProps) {
 
   // 每个动作都带上自己看到的这一步（stepKey）：这一手已经结算了、点击才到的话，服务器会拒绝，不会落到下一手
   const onCommand = (command: GameCommand) => sendCommand({ ...command, step: stepKey(game) });
-  const member = room.members.find((candidate) => candidate.id === socket.id);
+  const member = room.members.find((candidate) => candidate.id === (selfMemberId ?? socket.id));
   const spectating = !member;
   const myId = member?.playerId ?? watchId;
   const selfId = spectating ? "" : myId;
@@ -287,17 +303,38 @@ function GameBoard(props: GameBoardProps) {
   }
   const canContinue = !spectating && actions.some((action) => action.type === "nextRound");
 
-  // 「提示」：人机替我算一手，选中那张牌 / 那一排，理由写在提示条里
-  const [hintText, setHintText] = useState("");
-  useEffect(() => setHintText(""), [step]);
+  // 「提示」：人机替我算一手，选中那张牌 / 那一排（还要自己点确认），咕噜嘎贴在旁边说理由。
+  // 练习局随时能用；真实对局里只有自己和人机时能用（有别的真人就不显示，免得不公平）。
+  const botsOnly = !spectating && room.members.length > 1 && room.members.every((candidate) => candidate.id === member?.id || candidate.bot === true);
+  const hintAllowed = props.showHint === true || mode === "practice" || (mode === "online" && botsOnly);
+  const canHint = hintAllowed && !anim && (canSelect || iChoose);
+  const [hint, setHint] = useState<{ version: number; hint: Hint } | null>(null);
+  const shownHint = hint && hint.version === game.version && canHint ? hint.hint : null;
   function askHint() {
-    const decision = botHint(game, myId);
-    if (!decision) return;
-    if (decision.command.type === "select") setPicked(decision.command.card);
-    if (decision.command.type === "chooseRow") setPickedRow(decision.command.row);
-    setHintText(decision.reason);
+    if (hint && hint.version === game.version) {
+      setHint(null);
+      return;
+    }
+    const next = hintFor(game, myId);
+    if (next.card !== undefined) setPicked(next.card);
+    if (next.row !== undefined) setPickedRow(next.row);
+    setHint({ version: game.version, hint: next });
   }
-  const canHint = props.showHint === true && (canSelect || iChoose);
+  const askHintRef = useRef(askHint);
+  askHintRef.current = askHint;
+  useEffect(() => {
+    if (!canHint) return;
+    const handle = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (event.metaKey || event.ctrlKey || event.altKey || target?.closest("input, textarea, select, [contenteditable]")) return;
+      if (event.key.toLowerCase() === "h") askHintRef.current();
+    };
+    window.addEventListener("keydown", handle);
+    return () => window.removeEventListener("keydown", handle);
+  }, [canHint]);
+
+  // 真实对局里第一次遇到某条规则（第一次收第六张、第一次比所有排尾都小、第一次被托管……）时弹一句小贴士
+  const tips = useFirstTimeTips(GAME_ID, game.version, () => detectTips(game, selfId, autoPlaying), TIPS, mode === "online" && !spectating);
 
   // 键盘：←→ 挑手牌，空格 / 回车确认，Esc 取消；规则 C 时 1–4 选排
   const keyState = useRef({ canSelect, picked, iChoose, pickedRow, hand: me.hand, canUndo });
@@ -488,7 +525,6 @@ function GameBoard(props: GameBoardProps) {
     prompt = `第 ${game.round} 局结束`;
     sub = "看看这局谁收了多少";
   }
-  if (hintText && !anim && (canSelect || iChoose)) sub = `提示：${hintText}`;
   const urgent = secondsLeft !== null && secondsLeft <= 5 && waiting.includes(myId) && !spectating && !anim;
   const showTimer = !anim && game.phase !== "gameOver" && secondsLeft !== null;
 
@@ -615,7 +651,7 @@ function GameBoard(props: GameBoardProps) {
               disabled={!canSelect}
               onClick={() => pickCard(card)}
               title={isCommitted ? "已扣下（点「撤回」可以收回）" : isPicked ? "再点一下确认" : `选 ${card}`}
-              data-tutorial={isCommitted ? "committed-card" : "hand-card"}
+              data-tutorial={isCommitted ? "committed-card" : `card:${card}`}
               data-card={card}
             >
               <CardFace card={card} size={layout.hand} />
@@ -654,7 +690,7 @@ function GameBoard(props: GameBoardProps) {
         <button className="quiet-button nt-small" type="button" onClick={() => playback.skip()}>跳过动画</button>
       )}
       {canHint ? (
-        <button className="quiet-button nt-small" type="button" onClick={askHint} data-tutorial="hint-button">提示</button>
+        <button className={shownHint ? "quiet-button nt-small nt-hint on" : "quiet-button nt-small nt-hint"} type="button" onClick={askHint} title="人机替你算一步（键盘 H）" data-tutorial="hint-button">提示</button>
       ) : (
         <span data-tutorial="hint-button" className="nt-hint-anchor" />
       )}
@@ -725,7 +761,27 @@ function GameBoard(props: GameBoardProps) {
   const dialogs = !anim && (
     <>
       {game.phase === "roundEnd" && <RoundEndPanel game={game} myId={selfId} seconds={secondsLeft} canContinue={canContinue} busy={busy} onContinue={() => onCommand({ type: "nextRound" })} />}
-      {game.phase === "gameOver" && <FinalDialog game={game} room={room} myId={selfId} spectating={spectating} onRematch={onRematch} onLeave={onLeave} />}
+      {game.phase === "gameOver" && <FinalDialog game={game} room={room} myId={selfId} memberId={member?.id ?? ""} spectating={spectating} onRematch={onRematch} onLeave={onLeave} actions={finalActions} />}
+    </>
+  );
+
+  // 「提示」的咕噜嘎贴在那张牌 / 那一排旁边；小贴士等动画放完再出（不然收牌还没飞，提示先说了）
+  const coachLayer = (
+    <>
+      {shownHint && (
+        <Coach
+          view={{
+            key: `hint-${game.version}`,
+            say: shownHint.say,
+            ...(shownHint.note ? { note: shownHint.note } : {}),
+            anchor: shownHint.anchor,
+            focus: false,
+            face: "think",
+            actions: <button className="quiet-button" type="button" onClick={() => setHint(null)}>知道了</button>,
+          }}
+        />
+      )}
+      {tips.tip && !anim && <TipToast tip={tips.tip} onClose={tips.dismiss} onNever={tips.never} />}
     </>
   );
 
@@ -761,6 +817,7 @@ function GameBoard(props: GameBoardProps) {
                 className={`nt-chip${props2.active ? " active" : ""}${props2.member && !props2.member.connected ? " offline" : ""}`}
                 style={{ "--seat": seatColor(player.seat), "--seat-ink": seatInk(player.seat) } as CSSProperties}
                 data-player={player.id}
+                data-tutorial={`seat:${player.id}`}
                 title={`${player.name}：本局 ${props2.bulls}，累计 ${props2.total}`}
               >
                 <div className="nt-avatar" data-avatar={player.id}>
@@ -806,6 +863,7 @@ function GameBoard(props: GameBoardProps) {
         </section>
         {dialogs}
         {fly}
+        {coachLayer}
       </div>
     );
   }
@@ -849,6 +907,7 @@ function GameBoard(props: GameBoardProps) {
       )}
       {dialogs}
       {fly}
+      {coachLayer}
     </div>
   );
 }
@@ -902,16 +961,20 @@ function RoundEndPanel({ game, myId, seconds, canContinue, busy, onContinue }: {
   );
 }
 
-function FinalDialog({ game, room, myId, spectating, onRematch, onLeave }: {
+function FinalDialog({ game, room, myId, memberId, spectating, onRematch, onLeave, actions }: {
   game: GameState;
   room: LobbyRoomSnapshot;
   myId: string;
+  /** 自己在 room.members 里的 id（判断自己点没点过「再来一局」）。 */
+  memberId: string;
   spectating: boolean;
+  /** 练习局：替代「再来一局」的按钮。 */
+  actions?: ReactNode;
   onRematch: (accept: boolean) => void;
   onLeave: () => void;
 }) {
   const result = game.finalResult!;
-  const accepted = room.rematch?.acceptedIds.includes(socket.id ?? "") ?? false;
+  const accepted = room.rematch?.acceptedIds.includes(memberId) ?? false;
   const rows = [...game.players].sort((a, b) => a.total - b.total);
   const winners = result.winners.map((id) => game.players.find((player) => player.id === id)!);
   const maxTotal = Math.max(...game.players.map((player) => player.total));
@@ -959,7 +1022,12 @@ function FinalDialog({ game, room, myId, spectating, onRematch, onLeave }: {
             ))}
           </tbody>
         </table>
-        {spectating ? (
+        {actions ? (
+          <div className="nt-rematch" data-tutorial="final-actions">
+            <span>练习局打完了</span>
+            <div className="gm-panel-actions">{actions}</div>
+          </div>
+        ) : spectating ? (
           <div className="nt-rematch">
             <span>{room.rematch ? `等玩家决定要不要再来一局（${room.rematch.acceptedIds.length}/${room.members.length} 人同意）` : "对局结束"}</span>
             <div className="gm-panel-actions"><button className="quiet-button" type="button" onClick={onLeave}>离开观战</button></div>
