@@ -84,7 +84,7 @@ const pick = (card: number) => me({ type: "select", card });
 export const TUTORIAL_STEPS: readonly TutorialStep[] = [
   // ---------- 开场 ----------
   {
-    kind: "info", id: "welcome", lesson: "目标：少收牛头", face: "happy",
+    kind: "info", id: "welcome", lesson: "目标", face: "happy",
     say: "我是咕噜嘎，带你打几手牌。",
     note: "这个游戏收到的牛头都是罚分：罚分越少越好，最少的人赢。",
   },
@@ -115,7 +115,7 @@ export const TUTORIAL_STEPS: readonly TutorialStep[] = [
     say: "咕噜一号和咕噜二号也在扣牌……",
   },
   {
-    kind: "info", id: "h1-order", lesson: "从小到大放", anchor: "rows",
+    kind: "info", id: "h1-order", lesson: "从小到大", anchor: "rows",
     say: "亮牌后，按数字从小到大一张张放。",
     note: "这一手先放 10，再放 26，最后放你的 44。谁先扣的、坐在哪都不影响顺序。",
   },
@@ -151,7 +151,7 @@ export const TUTORIAL_STEPS: readonly TutorialStep[] = [
     say: "看看 45 和咕噜一号的 46 放到哪……",
   },
   {
-    kind: "info", id: "h2-four", lesson: "第 6 张要收", anchor: "row-3", face: "think",
+    kind: "info", id: "h2-four", lesson: "第六张", anchor: "row-3", face: "think",
     say: "第 3 排现在有 4 张了。",
     note: "再放 1 张是第 5 张，还安全；谁放成第 6 张，谁就把前 5 张收走。",
   },
@@ -172,7 +172,7 @@ export const TUTORIAL_STEPS: readonly TutorialStep[] = [
     note: "41、44、45、46、47 一共 10 个牛头（44 一张就 5 个）。第 3 排只剩下 49。",
   },
   {
-    kind: "info", id: "h3-order", lesson: "小牌先放会抢位", anchor: "row-3", face: "think",
+    kind: "info", id: "h3-order", lesson: "小牌先放", anchor: "row-3", face: "think",
     say: "49 单独出本来安全，是更小的 47 先放了进去。",
     note: "同一手里小的牌先放，会改变后面牌的去向。离排尾近，也不一定安全。",
   },
@@ -188,7 +188,7 @@ export const TUTORIAL_STEPS: readonly TutorialStep[] = [
     say: "这次它们先扣好了，头像角上会打勾。",
   },
   {
-    kind: "do", id: "pick5", lesson: "比排尾都小：挑一排", anchor: "card:5", then: "confirm", expect: pick(5), face: "think",
+    kind: "do", id: "pick5", lesson: "挑一排收", anchor: "card:5", then: "confirm", expect: pick(5), face: "think",
     say: "出 5，它比所有排尾都小。",
     note: "这种牌哪一排都接不上：亮牌后你要自己挑一排，整排收走。",
   },
@@ -203,7 +203,7 @@ export const TUTORIAL_STEPS: readonly TutorialStep[] = [
     note: "一定要收一排，收哪排自己定，通常挑牛头最少的。你的 5 会成为这一排的第一张。",
   },
   {
-    kind: "info", id: "h4-after", lesson: "收完接着放", anchor: "row-3", face: "happy",
+    kind: "info", id: "h4-after", lesson: "接着放", anchor: "row-3", face: "happy",
     say: "你只罚了 1 分，一号的 7 还接在了你的 5 后面。",
     note: "收走一排后，这一手剩下的牌按新的 4 排接着放。",
   },
@@ -226,7 +226,7 @@ export const TUTORIAL_STEPS: readonly TutorialStep[] = [
 
   // ---------- 结束条件、本站设定 ----------
   {
-    kind: "info", id: "round", lesson: "一局和终局", anchor: ["round", "prompt"],
+    kind: "info", id: "round", lesson: "终局", anchor: ["round", "prompt"],
     say: "10 手打完算一局，各人收的牛头加进累计罚分。",
     note: "有人累计到 66 分，要打完那一局才结束，局中超过也不停。罚分最少的赢，一样少就一起赢。",
   },
@@ -236,7 +236,7 @@ export const TUTORIAL_STEPS: readonly TutorialStep[] = [
     note: "都默认关。这局练习把目标分设成了 33，打得快一点。",
   },
   {
-    kind: "info", id: "auto", lesson: "超时和托管",
+    kind: "info", id: "auto", lesson: "托管",
     say: "超时或掉线也不怕，人机会替你出牌。",
     note: "每手 30 秒，连续 2 次超时会进托管：人机替你打，点「取消托管」就拿回来。掉线 3 秒也由人机接手，用原昵称回来就能回座。",
   },

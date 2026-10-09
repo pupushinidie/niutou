@@ -730,7 +730,7 @@ function GameBoard(props: GameBoardProps) {
 
   const menuItems = (
     <>
-      {!spectating && !autoPlaying && game.phase !== "gameOver" && (
+      {mode === "online" && !spectating && !autoPlaying && game.phase !== "gameOver" && (
         <button className="quiet-button" type="button" onClick={() => onAuto(true)} title="让人机替你出牌，随时可以取消">托管</button>
       )}
       <GameRules />
