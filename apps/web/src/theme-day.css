@@ -1,9 +1,23 @@
 /*
- * 白天版手调的部分。大部分白天样式由 day-theme.ts 从 app-pixel.css、niutou.css 换色生成，
+ * 白天版手调的部分。大部分白天样式由 day-theme.ts 从 app-pixel.css、nt-pages.css、niutou.css 换色生成，
  * 这里只放机械换色不合适的地方；选择器都以 :root[data-theme="day"] 开头。
  */
 :root[data-theme="day"] { color-scheme: light; }
-:root[data-theme="day"] .app-shell * { scrollbar-color: #aebad0 var(--bg); }
+:root[data-theme="day"] .app-shell * { scrollbar-color: #d9c4a0 var(--bg); }
 
-/* 调试牌桌的牌面字保持深色 */
-:root[data-theme="day"] .nt-card { color: #1a1208; }
+/* 牌桌背景：白天场景上压一层浅色，而不是夜间的深色 */
+:root[data-theme="day"] .nt-screen {
+  background:
+    linear-gradient(rgba(255, 250, 240, 0.45), rgba(255, 250, 240, 0.7)),
+    var(--scene) center / cover no-repeat,
+    #ffffff;
+}
+/* 头像底：白天用浅木色，不用深色方块 */
+:root[data-theme="day"] .nt-avatar { background: #f1e3c8; }
+/* 首页大图的边框 */
+:root[data-theme="day"] .nt-hero-art { box-shadow: 0 0 0 var(--px) #2a1a10, inset 0 0 0 var(--px) #b89a6a; }
+/* 弹窗背后的半透明格子：白天用浅一点的棕 */
+:root[data-theme="day"] .app-shell .gm-modal-backdrop { background: repeating-conic-gradient(rgba(42, 26, 16, 0.55) 0 25%, rgba(42, 26, 16, 0.35) 0 50%) 0 0 / 4px 4px; }
+:root[data-theme="day"] .app-shell .gm-modal-backdrop.nt-backdrop-light { background: repeating-conic-gradient(rgba(42, 26, 16, 0.35) 0 25%, rgba(42, 26, 16, 0.2) 0 50%) 0 0 / 4px 4px; }
+/* 通缉令上的名字在羊皮纸上，保持深色 */
+:root[data-theme="day"] .nt-poster b { color: #7a2a22; }

@@ -1,33 +1,39 @@
 import type { DayPalette } from "./day-theme";
 
 /**
- * 白天版调色表（模板里欲罢不能的蓝灰，谁是牛头王的界面阶段会按西部酒馆的配色重调）。
- * 深色底、面板、按钮 → 白底浅色；深色像素描边保留；浅色字 → 深色字。
+ * 白天版调色表（西部酒馆）：深木色底、面板 → 白底、奶油色面板；深棕描边保留；奶白字 → 深棕字。
+ * 牌桌（绿呢毡面、牌、排头、空格）、座位色的头像框和标签、飞牌层在白天保持原色（keep）。
+ * 牌桌背景的压暗渐变、头像底色这类机械换色不合适的，写在 src/theme-day.css。
  */
 export const palette: DayPalette = {
-  files: ["app-pixel.css", "niutou.css"],
+  files: ["app-pixel.css", "nt-pages.css", "niutou.css"],
   colors: {
-    "#0c1120": "#ffffff", // 底色、输入框
-    "#101729": "#f8f9fc", // 底色的棋盘纹
-    "#16203a": "#f5f7fb", // 面板
-    "#1d2a48": "#e8edf5", // 面板 2、分隔线
-    "#263759": "#e1e7f1", // 普通按钮、分隔线
-    "#18233d": "#fbf3df", // 管理员区
+    "#1a110b": "#ffffff", // 底色、输入框、顶栏
+    "#1f150d": "#fbf6ec", // 底色的棋盘纹
+    "#2c1d13": "#fbf3e4", // 面板、玩家卡、手牌栏
+    "#3b2719": "#f1e3c8", // 面板 2、分隔线
+    "#0e0805": "#2a1a10", // 像素描边（保持深棕）
+    "#86613a": "#ffffff", // 面板亮边
+    "#120b06": "#d9c4a0", // 面板暗边
+    "#4a3020": "#ecdcbc", // 普通按钮、分隔线
+    "#a67e4c": "#ffffff", // 按钮亮边
+    "#1a0f08": "#b89a6a", // 按钮暗边
+    "#2a1c10": "#fbf3df", // 管理员区
     "#3a2c10": "#fcefc6", // 金色字的底（选中项、状态牌）
-    "#04060c": "#1c2638", // 像素描边
-    "#3d5482": "#ffffff", // 面板亮边
-    "#080c17": "#c9d3e3", // 面板暗边
-    "#5a78ad": "#ffffff", // 按钮亮边
-    "#0b1120": "#aebad0", // 按钮暗边
+    "#12452a": "#d8f0dc", // 绿色状态牌
+    "#0b2614": "#7fbf8f",
   },
   text: {
-    "#eef3fb": "#1d2433",
-    "#93a3bd": "#5b6a86",
-    "#5d6f92": "#9aa8c0", // 输入框占位字
+    "#fff4dc": "#2a1a10",
+    "#cdb08a": "#7a5a3a",
+    "#8a6c50": "#b09a80", // 输入框占位字
+    "#ffcf6b": "#a5650a", // 本局牛头数字
+    "#f0c050": "#94650a", // 提示、标题
+    "#f25c5c": "#d1303f",
+    "#ff9a8a": "#c0392b",
+    "#b7f0c0": "#1f6b35",
   },
-  background: {
-    "#eef3fb": "#1d2a48", // 左上角标志中间那一条，白底上看不见，换成深蓝
-  },
+  background: {},
   values: {
     // 不能点的按钮：夜间是压暗，白底上压暗成了泥色，改成褪成浅灰
     "grayscale(0.6) brightness(0.7)": "grayscale(0.85) brightness(1.15)",
@@ -42,6 +48,10 @@ export const palette: DayPalette = {
     "--ok": "#1f8a45",
     "--bad": "#d1303f",
   },
-  // 牌面保持原来的底色（调试牌桌的 .nt-card；正式牌桌由界面阶段补）
-  keep: [".nt-card"],
+  // 牌桌上的东西（毡面、牌、排头、空格）、座位色、飞牌层、首页大图上的字、规则里的小牌桌保持原色
+  keep: [
+    ".nt-table", ".nt-row", ".nt-rowhead", ".nt-cell", ".nt-card", ".nt-ghost", ".nt-pending",
+    ".nt-fly-", ".nt-owner", ".nt-tag", ".nt-mini-avatar", ".nt-avatar", ".nt-poster", ".nt-hcard", ".nt-stamp",
+    ".nt-strip-item", ".nt-hero-art", ".nt-rules-example", ".nt-rules-arrow", ".nt-lamp", ".nt-status", ".nt-thinking",
+  ],
 };

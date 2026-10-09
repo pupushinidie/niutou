@@ -1,56 +1,399 @@
 /*
- * 调试牌桌的样式（引擎阶段放的，界面阶段会整个重做）。
- * 只用 app-pixel.css 里的变量；牌面按牛头数分 5 种底色（规则书 9.5）。
+ * 谁是牛头王的牌桌（西部酒馆）。尺寸都由 layout.ts 算好、经 GameBoard 的 CSS 变量传进来：
+ * --cw/--ch 4 排的牌，--hw/--hh 手牌，--table-w/--table-h 牌桌，--seat-w/--seat-h 玩家卡，--side-w 侧栏……
+ * 像素图一律 image-rendering: pixelated、整数倍；字号只用 12 的整数倍，关键信息 ≥ 24px。
+ * 牌桌（.nt-table 毡面、牌、空格、座位色）在白天版保持原色：类名在 day-palette.ts 的 keep 里。
  */
-.app-shell.nt-game { max-width: none; }
-.nt-screen { display: flex; flex-direction: column; gap: 12px; min-height: 100vh; padding: 12px 16px; box-sizing: border-box; }
-.nt-topbar { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; justify-content: space-between; }
-.nt-status { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; color: var(--muted); font-size: 14px; }
-.nt-topbar-right { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
-.nt-timer { color: var(--gold); font-size: 24px; }
-.nt-timer.low { color: var(--bad); }
-.nt-layout { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 12px; }
-@media (max-width: 900px) { .nt-layout { grid-template-columns: 1fr; } }
-.nt-main, .nt-side { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
-.nt-prompt { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; color: var(--gold); font-size: 24px; }
-.nt-feedback { color: var(--ok); margin: 0; }
-.nt-feedback.error { color: var(--bad); }
-.nt-panel, .nt-rows, .nt-reveal, .nt-hand { background: var(--panel); border: var(--px) solid var(--edge); padding: 10px; }
-.nt-panel h3, .nt-reveal h3, .nt-hand h3 { margin: 0 0 8px; font-size: 16px; color: var(--text); }
-.nt-panel h3 small, .nt-hand h3 small { color: var(--muted); font-size: 12px; margin-left: 8px; }
+.app-shell.nt-game { width: 100%; max-width: none; margin: 0; min-height: 100vh; }
+.nt-screen {
+  --felt-size: 128px;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap);
+  min-height: 100vh;
+  padding: 0 12px var(--gap);
+  box-sizing: border-box;
+  background:
+    linear-gradient(rgba(14, 8, 5, 0.62), rgba(14, 8, 5, 0.82)),
+    var(--scene) center / cover no-repeat,
+    #1a110b;
+  image-rendering: pixelated;
+}
+.nt-screen img, .nt-card, .nt-cell, .nt-fly-sprite, .nt-thinking { image-rendering: pixelated; }
+.nt-screen :is(.primary-button, .quiet-button) { width: auto; margin: 0; white-space: nowrap; }
 .nt-muted { color: var(--muted); font-size: 12px; }
-.nt-rows { display: flex; flex-direction: column; gap: 6px; }
-.nt-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-.nt-row.full .nt-row-name { color: var(--bad); }
-.nt-row-name { display: flex; flex-direction: column; width: 72px; color: var(--text); font-size: 14px; }
-.nt-row-name small { color: var(--muted); font-size: 12px; }
-.nt-row-cards { display: flex; gap: 4px; flex-wrap: wrap; }
-.nt-slot { width: 44px; height: 56px; border: var(--px) dashed var(--panel-2); box-sizing: border-box; }
-.nt-slot.danger { border-color: var(--bad); color: var(--bad); display: grid; place-items: center; font-size: 12px; }
-.nt-card { display: inline-flex; flex-direction: column; align-items: center; justify-content: center; width: 44px; height: 56px; box-sizing: border-box; border: var(--px) solid var(--edge); color: #1a1208; background: #f2e6c8; }
-.nt-card b { font-size: 20px; line-height: 1; }
-.nt-card i { font-style: normal; font-size: 12px; line-height: 1; color: #6e1020; word-break: break-all; text-align: center; }
-.nt-card.b2 { background: #9fd3f2; }
-.nt-card.b3 { background: #f2d27a; }
-.nt-card.b5 { background: #f29a6e; }
-.nt-card.b7 { background: #d36ef2; }
-.nt-card.dim { opacity: 0.4; }
-.nt-plays { display: flex; flex-wrap: wrap; gap: 8px; }
-.nt-play { display: flex; flex-direction: column; align-items: center; gap: 2px; font-size: 12px; color: var(--muted); }
-.nt-play.done { opacity: 0.55; }
-.nt-reveal ol { margin: 8px 0 0; padding-left: 20px; color: var(--text); font-size: 13px; }
-.nt-hand-cards { display: flex; flex-wrap: wrap; gap: 6px; }
-.nt-hand-card { padding: 0; border: var(--px) solid transparent; background: none; cursor: pointer; }
-.nt-hand-card.chosen { border-color: var(--gold); transform: translateY(-6px); }
-.nt-hand-card:disabled { cursor: default; }
-.nt-actions { display: flex; gap: 8px; margin-top: 8px; }
-.nt-player { display: grid; grid-template-columns: 1fr auto; gap: 2px 8px; padding: 6px 0; border-bottom: var(--px) solid var(--panel-2); color: var(--text); font-size: 13px; }
-.nt-player.waiting strong { color: var(--gold); }
-.nt-tag { margin-left: 6px; color: var(--muted); font-size: 12px; }
-.nt-log ul { margin: 0; padding-left: 16px; max-height: 240px; overflow-y: auto; color: var(--text); font-size: 12px; }
-.nt-final { max-width: 520px; }
-.nt-standings { padding-left: 20px; }
-.nt-standings li { display: flex; justify-content: space-between; gap: 12px; color: var(--text); }
-.nt-standings li.winner { color: var(--gold); }
-.nt-rematch { display: flex; flex-direction: column; gap: 8px; color: var(--muted); }
-.nt-row .primary-button, .nt-actions .primary-button { width: auto; flex: 0 0 auto; padding-inline: 16px; }
+
+/* ---------- 顶栏：一行 ---------- */
+.nt-top {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  height: var(--top-h);
+  margin: 0 -12px;
+  padding: 0 12px;
+  white-space: nowrap;
+  background: rgba(26, 17, 11, 0.88);
+  box-shadow: 0 var(--px) 0 0 #4a3020, 0 calc(var(--px) * 2) 0 0 var(--edge);
+}
+.nt-top .brand { flex: 0 0 auto; }
+.nt-round { display: flex; align-items: baseline; gap: 12px; color: var(--text); }
+.nt-round b { font-size: 24px; font-weight: 400; line-height: 1; }
+.nt-round small { color: var(--muted); font-size: 12px; }
+.nt-top-right { display: flex; align-items: center; gap: 8px; margin-left: auto; }
+.nt-top-right .connection-status { margin-left: 4px; }
+
+/* ---------- 中间：两列玩家卡 + 牌桌 + 侧栏 ---------- */
+.nt-mid { display: flex; justify-content: center; gap: var(--gap); height: var(--table-h); flex: 0 0 auto; }
+.nt-col { display: flex; flex-direction: column; justify-content: center; gap: var(--gap); width: var(--seat-w); flex: 0 0 auto; }
+.nt-side { width: var(--side-w); flex: 0 0 auto; min-width: 0; }
+
+/* ---------- 牌桌：木边 + 绿呢 ---------- */
+.nt-table {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--row-gap);
+  width: var(--table-w);
+  height: var(--table-h);
+  flex: 0 0 auto;
+  box-sizing: border-box;
+  padding: var(--pad);
+  border: var(--rim) solid #663d24;
+  border-image: var(--rim-img) 8 / var(--rim) round;
+  background: var(--felt-img) 0 0 / var(--felt-size) var(--felt-size) repeat, #2f5d3e;
+  background-clip: padding-box;
+}
+.nt-row { position: relative; display: flex; gap: 6px; height: var(--ch); }
+.nt-rowhead {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  width: var(--head-w);
+  flex: 0 0 auto;
+  color: #fff4dc;
+  background: rgba(14, 8, 5, 0.45);
+  box-shadow: inset 0 0 0 var(--px) rgba(255, 244, 220, 0.18);
+}
+.nt-rowhead b { font-size: 24px; font-weight: 400; line-height: 1; }
+.nt-rowhead small { color: #cdb08a; font-size: 12px; line-height: 1; }
+.nt-cells { display: flex; gap: var(--cell-gap); }
+.nt-cell { position: relative; flex: 0 0 auto; background-size: 100% 100%; background-repeat: no-repeat; }
+.nt-cell > .nt-card { position: absolute; left: 0; top: 0; }
+.nt-card { display: inline-block; flex: 0 0 auto; background-repeat: no-repeat; vertical-align: top; }
+.nt-row.full .nt-rowhead { background: rgba(122, 42, 34, 0.75); }
+.nt-cell.live { animation: nt-danger 0.8s steps(2, jump-none) infinite; }
+@keyframes nt-danger { 0% { box-shadow: 0 0 0 calc(var(--px) * 2) #e2453a; } 100% { box-shadow: 0 0 0 calc(var(--px) * 2) transparent; } }
+.nt-ghost { position: absolute; left: 0; top: 0; z-index: 2; opacity: 0.55; box-shadow: 0 0 0 calc(var(--px) * 2) #ffcf6b; }
+.nt-ghost.bad { box-shadow: 0 0 0 calc(var(--px) * 2) #e2453a; }
+.nt-row.warn .nt-rowhead { box-shadow: inset 0 0 0 calc(var(--px) * 2) #e2453a; }
+.nt-pending { position: absolute; left: 0; top: 0; z-index: 3; box-shadow: 0 0 0 calc(var(--px) * 2) #e2453a; }
+.nt-pending.strip { left: auto; right: 0; }
+.nt-pending.head { left: 0; top: 0; }
+/* 规则 C：我选排时 4 排都能点，排头变成金色「收这排」 */
+.nt-row.choosable { cursor: pointer; }
+.nt-row.choosable .nt-rowhead { color: #2a1c06; background: #f0c050; box-shadow: inset 0 0 0 var(--px) #fff2b8; }
+.nt-row.choosable .nt-rowhead small { color: #2a1c06; }
+.nt-row.choosable:hover { outline: calc(var(--px) * 2) solid #ffcf6b; outline-offset: 2px; }
+.nt-row.picked { outline: calc(var(--px) * 2) solid #fff4dc; outline-offset: 2px; }
+.nt-table.choosing .nt-row.choosable:not(.picked) .nt-cells { filter: brightness(0.92); }
+.nt-row.others-choosing .nt-rowhead { box-shadow: inset 0 0 0 var(--px) #f0c050; }
+
+/* ---------- 玩家卡 ---------- */
+.nt-seat {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: var(--seat-h);
+  padding: 6px 8px;
+  box-sizing: border-box;
+  color: var(--text);
+  background: rgba(44, 29, 19, 0.94);
+  box-shadow:
+    0 calc(var(--px) * -1) 0 0 var(--edge), 0 var(--px) 0 0 var(--edge),
+    calc(var(--px) * -1) 0 0 0 var(--edge), var(--px) 0 0 0 var(--edge),
+    inset calc(var(--px) * 3) 0 0 0 var(--seat), inset 0 calc(var(--px) * -1) 0 0 var(--shade);
+}
+.nt-seat.active { box-shadow:
+    0 calc(var(--px) * -1) 0 0 var(--edge), 0 var(--px) 0 0 var(--edge),
+    calc(var(--px) * -1) 0 0 0 var(--edge), var(--px) 0 0 0 var(--edge),
+    inset calc(var(--px) * 3) 0 0 0 var(--seat), inset 0 0 0 var(--px) #f0c050; }
+.nt-avatar { position: relative; flex: 0 0 auto; background: rgba(14, 8, 5, 0.5); box-shadow: 0 0 0 var(--px) var(--seat); }
+.nt-avatar > img { display: block; }
+.nt-seat.offline .nt-avatar > img, .nt-chip.offline .nt-avatar > img { filter: grayscale(1) brightness(0.7); }
+.nt-status { position: absolute; right: -6px; bottom: -6px; display: block; }
+.nt-status > img { display: block; }
+.nt-thinking {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background-image: var(--thinking-img);
+  background-repeat: no-repeat;
+  background-size: 400% 100%;
+  animation: nt-think 1s steps(4, jump-none) infinite;
+}
+@keyframes nt-think { 0% { background-position: 0 0; } 100% { background-position: 100% 0; } }
+.nt-seat-info { display: flex; flex-direction: column; gap: 4px; min-width: 0; flex: 1; }
+.nt-seat-name { display: flex; align-items: center; gap: 4px; min-width: 0; white-space: nowrap; overflow: hidden; }
+.nt-name { overflow: hidden; text-overflow: ellipsis; font-size: 12px; line-height: 16px; }
+.nt-seat.big .nt-name { font-size: 12px; }
+.nt-tag { flex: 0 0 auto; padding: 0 4px; font-style: normal; font-size: 12px; line-height: 16px; color: #fff4dc; background: #4a3020; }
+.nt-tag.bot { color: #d8e8ff; background: #2a62c0; }
+.nt-tag.you { color: #2a1c06; background: #f0c050; }
+.nt-tag.warn { color: #ffd8d0; background: #6e1020; }
+.nt-seat-stats { display: flex; align-items: center; gap: 12px; white-space: nowrap; }
+.nt-bulls { display: inline-flex; align-items: center; gap: 4px; }
+.nt-bulls b, .nt-total b { font-size: 24px; font-weight: 400; line-height: 1; }
+.nt-bulls b { color: #ffcf6b; }
+.nt-total { display: inline-flex; align-items: baseline; gap: 4px; }
+.nt-total small { color: var(--muted); font-size: 12px; }
+.nt-total.near b { color: #f25c5c; }
+.nt-seat.small { gap: 6px; padding: 4px 6px 4px 8px; }
+.nt-seat.medium .nt-seat-stats { flex-direction: column; align-items: flex-start; gap: 2px; }
+.nt-seat.xl { gap: 12px; padding: 8px 12px; }
+.nt-seat.xl .nt-name { font-size: 24px; line-height: 28px; }
+.nt-seat.xl .nt-seat-info { gap: 8px; }
+.nt-seat.xl .nt-bulls b, .nt-seat.xl .nt-total b { font-size: 36px; }
+.nt-seat.small .nt-seat-stats { gap: 8px; }
+.nt-seat.small .nt-status { right: -4px; bottom: -4px; }
+
+/* ---------- 手牌栏 ---------- */
+.nt-handbar {
+  display: flex;
+  align-items: stretch;
+  gap: var(--gap);
+  height: var(--hand-bar-h);
+  flex: 0 0 auto;
+  padding: 6px;
+  box-sizing: border-box;
+  background: rgba(44, 29, 19, 0.94);
+  box-shadow:
+    0 calc(var(--px) * -1) 0 0 var(--edge), 0 var(--px) 0 0 var(--edge),
+    calc(var(--px) * -1) 0 0 0 var(--edge), var(--px) 0 0 0 var(--edge),
+    inset var(--px) var(--px) 0 0 #86613a, inset calc(var(--px) * -1) calc(var(--px) * -1) 0 0 var(--shade);
+}
+.nt-action { display: flex; flex-direction: column; gap: 4px; width: var(--action-w); flex: 0 0 auto; min-width: 0; padding: 0 4px; }
+.nt-prompt-line { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.nt-prompt { color: #f0c050; font-size: 24px; font-weight: 400; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.nt-action.auto .nt-prompt { color: #8ec0ff; }
+.nt-timer { flex: 0 0 auto; color: var(--text); font-size: 24px; font-weight: 400; line-height: 1; }
+.nt-timer small { margin-left: 2px; color: var(--muted); font-size: 12px; }
+.nt-timer.urgent { color: #f25c5c; animation: app-blink 1s steps(2, jump-none) infinite; }
+.nt-sub { margin: 0; color: var(--muted); font-size: 12px; line-height: 16px; max-height: 32px; overflow: hidden; }
+.nt-sub.bad { color: #ff9a8a; }
+.nt-flash { margin: 0; color: var(--ok); font-size: 12px; line-height: 16px; }
+.nt-flash.bad { color: var(--bad); }
+.nt-buttons { display: flex; align-items: center; gap: 8px; margin-top: auto; flex-wrap: nowrap; }
+.nt-screen .nt-big { min-height: 44px; padding: 4px 16px; font-size: 24px; line-height: 1; }
+.nt-screen .nt-small { min-height: 32px; padding: 4px 10px; font-size: 12px; }
+.nt-hint-anchor { display: inline-block; width: 1px; height: 1px; }
+.nt-spectate { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: auto; color: var(--text); font-size: 12px; }
+.nt-spectate label { display: inline-flex; align-items: center; gap: 6px; }
+.nt-spectate select { height: 32px; padding: 0 6px; border: 0; color: var(--text); background: var(--bg); font: inherit; font-size: 12px; box-shadow: 0 0 0 var(--px) var(--edge), inset var(--px) var(--px) 0 0 var(--shade); }
+
+.nt-hand, .nt-strip {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: var(--cell-gap);
+  flex: 1;
+  min-width: 0;
+  padding-top: 14px;
+}
+.nt-hcard { position: relative; flex: 0 0 auto; height: var(--hh); padding: 0; border: 0; background: none; cursor: default; transform: translateY(-2px); }
+.nt-hand.can .nt-hcard { cursor: pointer; }
+.nt-hand.can .nt-hcard:hover:not(.picked):not(.committed) { transform: translateY(-6px); }
+.nt-hcard.picked { transform: translateY(-14px); box-shadow: 0 0 0 calc(var(--px) * 2) #ffcf6b, 0 calc(var(--px) * 3) 0 calc(var(--px) * 2) rgba(0, 0, 0, 0.45); }
+.nt-hcard.committed { transform: translateY(-14px); box-shadow: 0 0 0 calc(var(--px) * 2) #62c97a; }
+.nt-hcard.back { cursor: default; }
+.nt-stamp { position: absolute; left: 50%; top: -2px; transform: translate(-50%, -100%); padding: 0 4px; font-style: normal; font-size: 12px; line-height: 14px; color: #0b2614; background: #62c97a; white-space: nowrap; }
+.nt-empty-hand { align-self: center; color: var(--muted); font-size: 12px; }
+.nt-strip { padding-top: 0; align-items: flex-start; }
+.nt-strip-item { display: flex; flex-direction: column; align-items: center; gap: 2px; width: var(--hw); }
+.nt-strip-item.gone { visibility: hidden; }
+.nt-strip-item.low > span:first-child { box-shadow: 0 0 0 calc(var(--px) * 2) #e2453a; }
+.nt-owner { max-width: 100%; padding: 0 4px; overflow: hidden; color: var(--seat-ink); background: var(--seat); font-size: 12px; line-height: 16px; white-space: nowrap; text-overflow: ellipsis; }
+.nt-flip { display: inline-block; animation: nt-flip 0.9s steps(6, jump-none) both; }
+@keyframes nt-flip { 0% { transform: scaleX(0.1); } 50% { transform: scaleX(0.1); } 100% { transform: scaleX(1); } }
+.nt-me { width: var(--me-w); flex: 0 0 auto; display: flex; align-items: center; }
+.nt-me .nt-seat { width: 100%; height: 100%; }
+
+/* ---------- 侧栏 / 抽屉：记录 + 聊天 ---------- */
+.nt-side-inner { display: flex; flex-direction: column; gap: var(--gap); height: 100%; min-height: 0; }
+.nt-log {
+  flex: 0 0 34%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 8px 10px;
+  box-sizing: border-box;
+  background: rgba(44, 29, 19, 0.94);
+  box-shadow: 0 0 0 var(--px) var(--edge), inset var(--px) var(--px) 0 0 #86613a;
+}
+.nt-log h3, .nt-below h3 { margin: 0 0 4px; color: #f0c050; font-size: 12px; font-weight: 400; }
+.nt-below h3 small { margin-left: 8px; color: var(--muted); font-size: 12px; }
+.nt-log ul { flex: 1; min-height: 0; margin: 0; padding: 0; overflow-y: auto; list-style: none; color: var(--text); font-size: 12px; line-height: 18px; }
+.nt-log li { padding: 2px 0; border-bottom: var(--px) solid #3b2719; }
+.nt-chat { flex: 1; min-height: 0; display: flex; }
+.app-shell .nt-chat .room-chat.light { display: flex; flex-direction: column; flex: 1; min-height: 0; margin: 0; padding: 8px 10px; }
+.app-shell .nt-chat .room-chat-heading { margin-bottom: 6px; }
+.app-shell .nt-chat .room-chat-heading span { display: none; }
+.app-shell .nt-chat .room-chat-list { flex: 1; height: auto; min-height: 48px; }
+.app-shell .nt-chat .voice-bar { margin-bottom: 6px; }
+.app-shell .nt-chat .room-chat-form { margin-top: 6px; }
+.nt-drawer {
+  position: fixed;
+  top: calc(var(--top-h) + 4px);
+  right: 8px;
+  bottom: 8px;
+  z-index: 800;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: min(360px, calc(100vw - 16px));
+  padding: 8px;
+  background: rgba(26, 17, 11, 0.97);
+  box-shadow: 0 0 0 var(--px) var(--edge), inset var(--px) var(--px) 0 0 #86613a;
+}
+.nt-drawer > .quiet-button { align-self: flex-end; }
+.nt-drawer .nt-side-inner { flex: 1; }
+
+/* ---------- 飞牌层 ---------- */
+.nt-fly-layer { position: fixed; inset: 0; z-index: 900; pointer-events: none; overflow: hidden; }
+.nt-fly-card, .nt-fly-sprite, .nt-fly-plus { position: absolute; left: 0; top: 0; transform-origin: center; background-repeat: no-repeat; will-change: transform; }
+.nt-fly-card { box-shadow: 0 calc(var(--px) * 3) 0 0 rgba(0, 0, 0, 0.4); }
+.nt-fly-plus { display: flex; align-items: center; gap: 2px; color: #ffcf6b; font-size: 24px; line-height: 1; text-shadow: 2px 0 0 #2a1a10, -2px 0 0 #2a1a10, 0 2px 0 #2a1a10, 0 -2px 0 #2a1a10; }
+.nt-fly-plus img { width: 32px; height: 32px; }
+
+/* ---------- 局末、终局 ---------- */
+.app-shell .gm-modal-backdrop.nt-backdrop-light { background: repeating-conic-gradient(rgba(14, 8, 5, 0.6) 0 25%, rgba(14, 8, 5, 0.4) 0 50%) 0 0 / 4px 4px; }
+.app-shell .gm-panel.nt-round-end { width: min(560px, 100%); max-height: calc(100vh - 48px); overflow-y: auto; }
+.app-shell .gm-panel.nt-final { width: min(720px, 100%); max-height: calc(100vh - 48px); overflow-y: auto; }
+.nt-score-table { width: 100%; margin-top: 12px; border-collapse: collapse; color: var(--text); font-size: 12px; }
+.nt-score-table th { padding: 4px 6px; color: var(--muted); font-weight: 400; text-align: left; border-bottom: var(--px) solid #4a3020; }
+.nt-score-table td { padding: 4px 6px; border-bottom: var(--px) solid #3b2719; vertical-align: middle; }
+.nt-who { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.nt-score-table tr.me td { background: rgba(240, 192, 80, 0.12); }
+.nt-score-table tr.winner .nt-name { color: #f0c050; }
+.nt-num { white-space: nowrap; font-size: 24px; }
+.nt-num img { margin-right: 4px; vertical-align: middle; }
+.nt-num.big { color: #fff4dc; }
+.nt-rounds { color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
+.nt-mini-avatar { display: inline-block; flex: 0 0 auto; width: 32px; height: 32px; box-shadow: 0 0 0 var(--px) var(--seat); }
+.nt-mini-avatar img { display: block; }
+.nt-final-head { display: flex; align-items: center; gap: 16px; }
+.nt-final-head > div:nth-child(2) { flex: 1; min-width: 0; }
+.nt-star { position: relative; flex: 0 0 auto; width: 64px; height: 64px; }
+.nt-star img { display: block; }
+.nt-sparkle { position: absolute; right: -12px; top: -12px; width: 32px; height: 32px; background-image: var(--sparkle-img); background-size: 600% 100%; background-repeat: no-repeat; animation: nt-sparkle 0.72s steps(6, jump-none) infinite; pointer-events: none; }
+@keyframes nt-sparkle { 0% { background-position: 0 0; } 100% { background-position: 100% 0; } }
+.nt-poster { position: relative; flex: 0 0 auto; width: 128px; height: 160px; }
+.nt-poster-bg { position: absolute; inset: 0; }
+.nt-poster-face { position: absolute; left: 32px; top: 46px; }
+.nt-poster b { position: absolute; left: 0; right: 0; top: 10px; color: #7a2a22; font-size: 24px; font-weight: 400; text-align: center; line-height: 1; }
+.nt-poster span { position: absolute; left: 4px; right: 4px; top: 118px; color: #2a1a10; font-size: 12px; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.nt-rematch { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; color: var(--muted); font-size: 12px; }
+.app-shell .nt-round-end .gm-panel-actions, .app-shell .nt-final .gm-panel-actions { align-items: center; justify-content: space-between; margin-top: 12px; }
+
+/* ---------- 规则弹窗 ---------- */
+.app-shell .gm-panel.nt-rules { width: min(860px, 100%); max-height: calc(100vh - 48px); overflow-y: auto; }
+.nt-rules-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.nt-rules-body { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 24px; margin-top: 8px; color: var(--text); font-size: 12px; line-height: 1.7; }
+.nt-rules-body h3 { display: flex; align-items: center; gap: 6px; margin: 0 0 4px; color: #f0c050; font-size: 24px; font-weight: 400; }
+.nt-rules-body p, .nt-rules-body ol, .nt-rules-body ul { margin: 0; padding-left: 18px; }
+.nt-rules-body p { padding-left: 0; }
+.nt-rules-body b { color: #f0c050; font-weight: 400; }
+.nt-rules-cards { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.nt-rules-cards figure { display: flex; flex-direction: column; align-items: center; gap: 2px; width: 72px; margin: 0; }
+.nt-rules-cards figcaption { color: var(--muted); font-size: 12px; text-align: center; line-height: 1.3; }
+.nt-rules-example { display: flex; align-items: center; gap: 8px; margin-top: 8px; padding: 6px; background: var(--felt-img, #2f5d3e) 0 0 / 128px 128px, #2f5d3e; }
+.nt-rules-row { display: flex; gap: 4px; }
+.nt-rules-arrow { color: #fff4dc; font-size: 12px; }
+
+/* ---------- 中等宽度（没有侧栏） ---------- */
+.nt-screen.mid .nt-round small { display: none; }
+
+/* ---------- 手机 ---------- */
+.nt-screen.phone { gap: var(--gap); padding: 0 6px 12px; }
+.nt-screen.phone .nt-top { position: relative; gap: 8px; height: 40px; margin: 0 -6px; padding: 0 6px; }
+.nt-ptop { display: flex; align-items: baseline; gap: 8px; flex: 1; min-width: 0; }
+.nt-ptop .nt-prompt { flex: 1; min-width: 0; }
+.nt-menu-button { flex: 0 0 auto; }
+.nt-menu {
+  position: absolute;
+  top: 44px;
+  right: 6px;
+  z-index: 950;
+  display: grid;
+  gap: 10px;
+  width: min(300px, calc(100vw - 12px));
+  padding: 12px;
+  white-space: normal;
+  background: rgba(26, 17, 11, 0.98);
+  box-shadow: 0 0 0 var(--px) var(--edge), inset var(--px) var(--px) 0 0 #86613a, 0 8px 0 0 rgba(0, 0, 0, 0.35);
+}
+.nt-menu .nt-round { flex-wrap: wrap; }
+.nt-menu-items { display: flex; flex-wrap: wrap; gap: 8px; }
+.nt-chips { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 4px; }
+.nt-chip {
+  display: grid;
+  grid-template-columns: 32px 1fr;
+  grid-template-rows: 32px auto;
+  align-items: center;
+  column-gap: 4px;
+  padding: 3px 4px 2px;
+  min-width: 0;
+  background: rgba(44, 29, 19, 0.94);
+  box-shadow: 0 0 0 var(--px) var(--edge), inset 0 calc(var(--px) * -2) 0 0 var(--seat);
+}
+.nt-chip.active { box-shadow: 0 0 0 var(--px) var(--edge), inset 0 0 0 var(--px) #f0c050, inset 0 calc(var(--px) * -2) 0 0 var(--seat); }
+.nt-chip .nt-avatar { width: 32px; height: 32px; }
+.nt-chip .nt-status { right: -3px; bottom: -3px; width: 16px; height: 16px; }
+.nt-chip-bulls { color: #ffcf6b; font-size: 24px; font-weight: 400; line-height: 1; text-align: center; }
+.nt-chip-name { grid-column: 1 / -1; overflow: hidden; color: var(--text); font-size: 12px; line-height: 14px; white-space: nowrap; text-overflow: ellipsis; }
+.nt-screen.phone .nt-table { align-self: center; }
+.nt-screen.phone .nt-rowhead { gap: 0; }
+.nt-screen.phone .nt-row { gap: 3px; }
+.nt-screen.phone .nt-handbar { height: auto; gap: 4px; padding: 4px; }
+.nt-screen.phone .nt-hand, .nt-screen.phone .nt-strip { flex: 0 0 auto; flex-wrap: wrap; justify-content: flex-start; align-content: flex-start; width: calc(var(--hw) * 5 + var(--cell-gap) * 4); padding-top: 0; row-gap: 4px; }
+.nt-screen.phone .nt-hcard { transform: none; }
+.nt-screen.phone .nt-hcard.picked, .nt-screen.phone .nt-hcard.committed { transform: none; }
+.nt-screen.phone .nt-stamp { top: 0; transform: translate(-50%, 0); }
+.nt-screen.phone .nt-strip-item { position: relative; }
+.nt-screen.phone .nt-owner { position: absolute; left: 0; top: 0; max-width: 100%; }
+.nt-pbuttons { display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 0; }
+.nt-pbuttons .nt-seat { height: auto; padding: 2px 4px 2px 6px; }
+.nt-pbuttons .nt-seat .nt-seat-name { display: none; }
+.nt-pbuttons .nt-seat .nt-avatar { display: none; }
+.nt-pbuttons .nt-seat .nt-seat-stats { flex-direction: column; align-items: flex-start; gap: 2px; }
+.nt-pbuttons .nt-buttons { flex-direction: column; align-items: stretch; margin-top: 0; }
+.nt-pbuttons .nt-big { padding: 4px 6px; }
+.nt-sub.phone { padding: 0 2px; max-height: none; }
+.nt-screen.phone .nt-flash { padding: 0 2px; }
+.nt-screen.phone .nt-spectate { margin: 0; padding: 4px; }
+.nt-below { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
+.nt-player-list { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.nt-player-list .nt-seat { height: auto; min-height: 48px; }
+.nt-below .nt-side-inner { height: auto; }
+.nt-below .nt-log { flex: none; max-height: 240px; }
+.nt-below .nt-chat { flex: none; }
+.app-shell .nt-below .nt-chat .room-chat-list { height: 180px; flex: none; }
+.nt-screen.phone .nt-rules-body { grid-template-columns: 1fr; }
+@media (max-width: 520px) {
+  .app-shell .gm-panel.nt-final, .app-shell .gm-panel.nt-round-end, .app-shell .gm-panel.nt-rules { padding: 14px 12px; }
+  .nt-final-head { flex-wrap: wrap; }
+  .nt-rules-body { grid-template-columns: 1fr; }
+  .nt-poster { transform: none; }
+}
+
+/* 小煤油灯（夜间，顶栏牌名旁边） */
+.nt-lamp { display: inline-block; width: 16px; height: 32px; flex: 0 0 auto; background-image: var(--lamp-img); background-size: 400% 100%; background-repeat: no-repeat; animation: nt-lamp 0.6s steps(4, jump-none) infinite; }
+@keyframes nt-lamp { 0% { background-position: 0 0; } 100% { background-position: 100% 0; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .nt-thinking, .nt-cell.live, .nt-timer.urgent, .nt-flip, .nt-sparkle, .nt-lamp { animation: none; }
+}
