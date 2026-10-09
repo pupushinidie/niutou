@@ -460,7 +460,7 @@ function GameBoard(props: GameBoardProps) {
   } else if (game.phase === "gameOver") {
     prompt = "游戏结束";
   } else if (spectating) {
-    prompt = game.phase === "select" ? `大家在选牌（${game.players.length - waiting.length}/${game.players.length}）` : game.phase === "chooseRow" ? `${nameOf(game.chooser!)}正在选排` : `第 ${game.round} 局结束`;
+    prompt = game.phase === "select" ? `选牌中 ${game.players.length - waiting.length}/${game.players.length}` : game.phase === "chooseRow" ? `${nameOf(game.chooser!)}正在选排` : `第 ${game.round} 局结束`;
   } else if (autoPlaying) {
     prompt = "托管中";
     sub = "人机正在替你出牌，点「取消托管」拿回来";
@@ -922,7 +922,7 @@ function FinalDialog({ game, room, myId, spectating, onRematch, onLeave }: {
     : iWon ? (winners.length > 1 ? `你和${winners.filter((player) => player.id !== myId).map((player) => player.name).join("、")}并列获胜！` : "你赢了！") : `${winners.map((player) => player.name).join("、")} ${winners.length > 1 ? "并列获胜" : "获胜"}`;
   return (
     <div className="gm-modal-backdrop" role="presentation">
-      <section className="gm-panel nt-final" role="dialog" aria-modal="true" aria-labelledby="nt-final-title" data-tutorial="final">
+      <section className={`gm-panel nt-final${game.players.length > 6 ? " many" : ""}`} role="dialog" aria-modal="true" aria-labelledby="nt-final-title" data-tutorial="final">
         <div className="nt-final-head">
           <span className="nt-star"><img src={ART.star} alt="" width={64} height={64} /><i className="nt-sparkle" /></span>
           <div>
