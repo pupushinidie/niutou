@@ -24,7 +24,9 @@ import {
 import { botCommand, botDecision, botHint, botUnknownCards } from "../src/bot.js";
 
 const ME = "p1";
-const decide = (state: GameState, id = ME) => botDecision(redactGameForViewer(state, id), id)!;
+/** 关掉「算太久就停」的保险丝：机器忙的时候它会让结果随负载变，比较决定是否一样的测试要关掉它。 */
+const EXACT = { maxMs: Infinity };
+const decide = (state: GameState, id = ME) => botDecision(redactGameForViewer(state, id), id, EXACT)!;
 const pickCard = (state: GameState, id = ME) => {
   const command = decide(state, id).command;
   expect(command.type).toBe("select");
@@ -37,8 +39,8 @@ describe("人机只看自己座位能看到的信息（补充#1.10-7）", () => 
       const count = 2 + (seed % 9);
       const state = createGame(Array.from({ length: count }, (_, i) => ({ id: `p${i + 1}`, name: `${i}` })), seed);
       for (const player of state.players) {
-        const full = botCommand(state, player.id);
-        const view = botCommand(redactGameForViewer(state, player.id), player.id);
+        const full = botCommand(state, player.id, EXACT);
+        const view = botCommand(redactGameForViewer(state, player.id), player.id, EXACT);
         expect(view).toEqual(full);
       }
     }
@@ -49,7 +51,7 @@ describe("人机只看自己座位能看到的信息（补充#1.10-7）", () => 
       const state = createGame(Array.from({ length: 5 }, (_, i) => ({ id: `p${i + 1}`, name: `${i}` })), 500 + seed);
       // 对手 p2 先选好一张（没亮）
       const chosen = applyCommand(state, "p2", { type: "select", card: state.players[1]!.hand[3]! });
-      const before = botCommand(redactGameForViewer(chosen, ME), ME);
+      const before = botCommand(redactGameForViewer(chosen, ME), ME, EXACT);
       // 打乱看不到的东西：对手之间互换手牌、改已选的牌、改 deck / seed
       const scrambled = structuredClone(chosen);
       const others = scrambled.players.slice(1);
@@ -63,7 +65,7 @@ describe("人机只看自己座位能看到的信息（补充#1.10-7）", () => 
       scrambled.deck = pool.slice(cursor);
       scrambled.seed = 12345;
       scrambled.rngState = 999;
-      expect(botCommand(redactGameForViewer(scrambled, ME), ME)).toEqual(before);
+      expect(botCommand(redactGameForViewer(scrambled, ME), ME, EXACT)).toEqual(before);
     }
   });
 
@@ -179,7 +181,7 @@ describe("补充#1.10 人机最容易犯的蠢错", () => {
   it("#8 分差很小的几张里随机挑：同一局面结果固定（可复现），不同局面会变；放宽 tie 时会挑不同的牌", () => {
     const state = buildGame({ players: [{ hand: [23, 41, 61, 81] }, {}, {}], rows: [[20], [40], [60], [80]] });
     const view = redactGameForViewer(state, ME);
-    expect(botCommand(view, ME)).toEqual(botCommand(view, ME));
+    expect(botCommand(view, ME, EXACT)).toEqual(botCommand(view, ME, EXACT));
     const picks = new Set<number>();
     for (let round = 1; round <= 30; round += 1) {
       const variant = { ...structuredClone(state), round };

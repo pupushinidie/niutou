@@ -42,7 +42,7 @@ export interface BotOptions {
   readonly oppFirst: "baseline" | "quick";
   /** 快速打法里「先出大牌」的分量。 */
   readonly urgency: number;
-  /** 保险丝：抽够 minWorlds 个世界以后，一步已经算了这么多毫秒就停（服务器忙的时候不拖慢别的房间）。 */
+  /** 保险丝：抽够 12 个世界以后，一步已经算了这么多毫秒就停（服务器忙的时候不拖慢别的房间）。 */
   readonly maxMs: number;
 }
 
@@ -104,6 +104,8 @@ function hashState(view: GameState, playerId: string, hand: readonly number[]): 
   return h >>> 0;
 }
 
+/** 保险丝至少要抽够的世界数（再少就太不准了）。 */
+const GUARD_MIN_WORLDS = 12;
 const now = () => globalThis.performance?.now() ?? Date.now();
 const rowNo = (row: number) => `第 ${row + 1} 排`;
 const tailOf = (row: readonly number[]) => row[row.length - 1]!;
@@ -382,7 +384,7 @@ function evaluateCards(ctx: Context): { stats: CardStats[]; worlds: number } {
   const start = now();
   let done = 0;
   for (let w = 0; w < worlds; w += 1) {
-    if (w >= ctx.opts.minWorlds && now() - start > ctx.opts.maxMs) break;
+    if (w >= GUARD_MIN_WORLDS && now() - start > ctx.opts.maxMs) break;
     done += 1;
     const world = sampleWorld(ctx);
     // 对手这一手出什么只取决于他们的手牌和现在的 4 排，和我出什么无关：每个世界算一次
@@ -437,30 +439,37 @@ function selectReason(ctx: Context, chosen: CardStats, all: CardStats[]): string
   const card = chosen.card;
   const row = target(rows, card);
   const opponents = ctx.n - 1;
+  const pct = Math.max(1, Math.round(chosen.takeProb * 100));
+  const safest = Math.min(...all.map((stat) => stat.takeProb));
   if (row < 0) {
     const bulls = rows.map((r) => sumBulls(r));
     const cheapest = baselineRowFast(rows, bulls);
-    const safeExists = all.some((stat) => stat.card !== card && stat.takeProb === 0);
-    if (safeExists) return `${card} 比所有排尾都小，可以自己挑一排收：${rowNo(cheapest)}只有 ${bulls[cheapest]} 个牛头，趁便宜收掉，换个干净的排头。`;
-    return `没有安全的牌，用 ${card} 主动收掉只有 ${bulls[cheapest]} 个牛头的${rowNo(cheapest)}，好过冒险去吃大排。`;
+    const cheap = bulls[cheapest]! <= 3 ? `只有 ${bulls[cheapest]} 个牛头的${rowNo(cheapest)}` : `最便宜的${rowNo(cheapest)}（${bulls[cheapest]} 个牛头）`;
+    const safeExists = all.some((stat) => stat.card !== card && stat.takeProb < 0.1 && target(rows, stat.card) >= 0);
+    if (safeExists) return `${card} 比所有排尾都小，出了要自己挑一排收走：现在收${cheap}很便宜，换个干净的排头，以后好出牌。`;
+    return `没有安全的牌，用 ${card} 主动收掉${cheap}，好过冒险去吃更大的排。`;
   }
   const target_ = rows[row]!;
   const tail = tailOf(target_);
   const space = ROW_LIMIT - target_.length;
   if (space === 0) {
-    return `每张牌都不好出：${card} 要接的${rowNo(row)}已经 5 张，大概要收 ${sumBulls(target_)} 个牛头，但别的牌预计更糟。`;
+    return `每张牌都不好出：${card} 要接的${rowNo(row)}已经 5 张，多半要收 ${sumBulls(target_)} 个牛头，但别的牌算下来更糟。`;
   }
   const g = gapUnknown(ctx, row, card);
-  const lowRisk = Math.min(...rows.map((r) => tailOf(r))) >= 30 && chosen.takeProb > 0;
-  if (chosen.takeProb === 0 || g < space || opponents < space) {
+  if (chosen.takeProb < 0.05) {
     if (card >= 80) return `${card} 现在接在${rowNo(row)}（排尾 ${tail}）后面很安全，大牌越晚越难出，趁现在打掉。`;
     if (g === 0) return `${card} 紧接在${rowNo(row)}的 ${tail} 后面，中间没有别人能出的牌，安全。`;
     if (g < space || opponents < space) return `${card} 接在${rowNo(row)}后面，那排才 ${target_.length} 张，别人凑不满 6 张，安全。`;
     return `${card} 接在${rowNo(row)}（排尾 ${tail}）后面，这一手基本不会收牌。`;
   }
-  const pct = Math.round(chosen.takeProb * 100);
-  if (lowRisk && g === 0) {
-    return `${card} 接在${rowNo(row)}后面，但排尾都偏高，有人可能用小牌先把那排收走，约 ${pct}% 会出事；手里别的牌更危险。`;
+  // 不是这一手最稳的牌：说清楚为什么还是出它
+  if (chosen.takeProb > safest + 0.1) {
+    const why = card >= 80 ? "大牌越往后越难出" : "留到后面更难出手";
+    return `${card} 这一手约 ${pct}% 要收${rowNo(row)}（${sumBulls(target_)} 个牛头），但${why}，现在打掉总体更划算。`;
+  }
+  const lowTails = Math.min(...rows.map((r) => tailOf(r)));
+  if (g === 0 && lowTails >= 30) {
+    return `${card} 紧接在${rowNo(row)}后面，但排尾都偏高，可能有人用小牌先把那排收走、把你挤到别处，约 ${pct}% 会出事；手里别的牌更危险。`;
   }
   if (target_.length === 4) {
     return `${card} 接的${rowNo(row)}已经 4 张，再有人插进来就得收，约 ${pct}% 的机会；这已经是手里最稳的一张。`;
@@ -522,7 +531,7 @@ function decideChooseRow(ctx: Context): BotDecision {
   const start = now();
   let done = 0;
   for (let w = 0; w < worlds; w += 1) {
-    if (w >= ctx.opts.minWorlds && now() - start > ctx.opts.maxMs) break;
+    if (w >= GUARD_MIN_WORLDS && now() - start > ctx.opts.maxMs) break;
     done += 1;
     const world = sampleWorld(ctx);
     for (const option of options) {
@@ -585,7 +594,8 @@ function chooseRowReason(ctx: Context, chosen: RowStats, options: RowStats[]): s
   }
   const altNames = rivals.map((alt) => rowNo(alt.row)).join("、");
   const bigger = rivals.every((alt) => tailOf(ctx.view.rows[alt.row]!) < tailOf(ctx.view.rows[chosen.row]!));
-  if (ctx.hand.length === 0 || (bigger && Math.abs(rivals[0]!.score - chosen.score) <= 0.05)) {
+  if (ctx.hand.length === 0) return `${head}，和${altNames}一样少；这一局手牌已经出完，收哪排都一样。`;
+  if (bigger && Math.abs(rivals[0]!.score - chosen.score) <= 0.05) {
     return `${head}，和${altNames}一样少；收排尾最大的这排，留下的排尾更低，别人更难接。`;
   }
   return `${head}，和${altNames}一样少，但收这排以后剩下的手牌更好出。`;
