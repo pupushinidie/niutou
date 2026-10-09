@@ -9,6 +9,7 @@ export {
   DEFAULT_OPTIONS,
   defaultConfig,
   legalActions,
+  normalizeCommand,
   normalizeOptions,
   redactGameForSpectator,
   redactGameForViewer,
@@ -33,7 +34,8 @@ export {
   SCENE_NAMES,
   SCENE_NAMES_OF_PLAYERS,
 } from "./scenes.js";
-export type { ExactSpec, PlayerSpec, SceneName, SceneOptions, SceneRoomOptions } from "./scenes.js";
+export type { ExactSpec, PlayerSpec, RevealFrame, SceneName, SceneOptions, SceneRoomOptions } from "./scenes.js";
+export { stateProblems } from "./validate.js";
 export { createRng } from "./rng.js";
 export type { Rng } from "./rng.js";
 export { CAPACITY_OPTIONS, DEFAULT_ROOM_ACCESS, OPTION_LIMITS } from "./roomTypes.js";

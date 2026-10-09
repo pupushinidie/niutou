@@ -10,7 +10,7 @@
 //   4. 观战的人默认谁的手牌都看不到；第 2 局起房主打开「观战看手牌」，之后能看到手牌，但 1 照样成立。
 // 有泄露就打印并以退出码 1 结束。
 import { io } from "socket.io-client";
-import { baselineCommand, redactGameForViewer, waitingFor } from "../packages/game/dist/index.js";
+import { baselineCommand, redactGameForViewer, stepKey, waitingFor } from "../packages/game/dist/index.js";
 
 const COUNT = Number(process.argv[2] ?? 4);
 const URL = process.env.SERVER_URL ?? "http://localhost:3015";
@@ -118,7 +118,7 @@ while (Date.now() < deadline) {
     const seat = room.members.find((member) => member.id === client.socket.id)?.playerId;
     if (!seat || !waitingFor(view).includes(seat)) continue;
     const command = baselineCommand(redactGameForViewer(view, seat), seat);
-    if (command) await client.emit("game:command", command);
+    if (command) await client.emit("game:command", { ...command, step: stepKey(view) });
   }
 }
 await sleep(300);

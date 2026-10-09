@@ -281,9 +281,42 @@ function cloneState(state: GameState): GameState {
   return next;
 }
 
-function applyInternal(state: GameState, playerId: string, command: GameCommand, rng: Rng, auto: boolean): { state: GameState; events: GameEvent[] } {
+/**
+ * 把收到的动作整理成只含规则要用的字段（客户端多塞的东西一概丢掉，不进校验也不进动作序列）。
+ * 字段值的合法性（牌在不在手里、排号对不对）由各个动作自己检查。
+ */
+export function normalizeCommand(raw: unknown): GameCommand {
+  if (!raw || typeof raw !== "object") throw new Error("未知的行动。");
+  const input = raw as Record<string, unknown>;
+  const step = typeof input.step === "string" && input.step.length <= 40 ? { step: input.step } : {};
+  const number = (value: unknown) => (typeof value === "number" ? value : Number.NaN);
+  switch (input.type) {
+    case "select":
+      return { type: "select", card: number(input.card), ...step };
+    case "unselect":
+      return { type: "unselect", ...step };
+    case "chooseRow":
+      return { type: "chooseRow", row: number(input.row), ...step };
+    case "nextRound":
+      return { type: "nextRound", ...step };
+    default:
+      throw new Error("未知的行动。");
+  }
+}
+
+/** 去掉 step，记进动作序列（重放时不需要）。 */
+function withoutStep(command: GameCommand): GameCommand {
+  const { step: _step, ...rest } = command;
+  return rest as GameCommand;
+}
+
+function applyInternal(state: GameState, playerId: string, raw: GameCommand, rng: Rng, auto: boolean): { state: GameState; events: GameEvent[] } {
   if (state.phase === "gameOver") throw new Error("对局已经结束。");
   findPlayer(state, playerId);
+  const command = normalizeCommand(raw);
+  if (command.step !== undefined && command.step !== stepKey(state)) {
+    throw new Error("这一手已经结算了，请看最新的局面再选。");
+  }
   const next = cloneState(state);
   const player = findPlayer(next, playerId);
   const events: GameEvent[] = [];
@@ -320,14 +353,18 @@ function runCommand(state: GameState, playerId: string, command: GameCommand, au
   const rng = createRng(state.rngState ?? state.seed ?? 0);
   const { state: next, events } = applyInternal(state, playerId, command, rng, auto);
   next.rngState = rng.state;
-  const entry: LogEntry = auto ? { player: playerId, command, auto: true } : { player: playerId, command };
+  const clean = withoutStep(normalizeCommand(command));
+  const entry: LogEntry = auto ? { player: playerId, command: clean, auto: true } : { player: playerId, command: clean };
   next.log = [...(state.log ?? []), entry];
   return { state: next, events };
 }
 
-/** 服务端用：随机数状态存在 state.rngState 里，动作记进 state.log。 */
-export function applyCommand(state: GameState, playerId: string, command: GameCommand): GameState {
-  return runCommand(state, playerId, command).state;
+/**
+ * 服务端用：随机数状态存在 state.rngState 里，动作记进 state.log。
+ * opts.auto：这一步是替这个座位代做的（托管、离线由人机代打）；规则 C 的那一步会标 auto，界面显示「代选」。
+ */
+export function applyCommand(state: GameState, playerId: string, command: GameCommand, opts: { auto?: boolean } = {}): GameState {
+  return runCommand(state, playerId, command, opts.auto === true).state;
 }
 
 /** 现在还要等谁做决定：选牌时没选好的人；选排时 chooser；局末没点继续的人。 */

@@ -80,6 +80,8 @@ const ROOM_CODE_LENGTH = 6;
 const ROOM_CHAT_LIMIT = 100;
 const ROOM_CHAT_MAX_LENGTH = 200;
 const ROOM_CHAT_RATE_LIMIT_MS = 1_000;
+/** 每个连接每秒最多发这么多个对局动作（防止刷动作把服务器拖垮）。 */
+const COMMAND_RATE_LIMIT = 20;
 const ROOM_ABANDON_MS = Number(process.env.ROOM_ABANDON_MS ?? 2 * 60_000);
 const REMATCH_TIMEOUT_MS = Number(process.env.REMATCH_TIMEOUT_MS ?? 60_000);
 const ADMIN_RETRY_DELAY_MS = 2_000;
@@ -107,6 +109,8 @@ const TURN_CREDENTIAL_TTL_SECONDS = 24 * 60 * 60;
 const rooms = new Map<string, RoomState>();
 const socketRooms = new Map<string, string>();
 const roomChatTimes = new Map<string, number>();
+/** 每个连接这一秒发了几个对局动作。 */
+const commandCounts = new Map<string, { second: number; count: number }>();
 const adminFailureTimes = new Map<string, number>();
 
 export const httpServer = createServer((request, response) => {
@@ -423,6 +427,9 @@ function returnToWaiting(room: RoomState, kickedIds: string[], reason: string): 
   room.status = "waiting";
   clearGameTimers(room);
   delete room.game;
+  // 回到等候房间：托管标记和超时次数清掉（等候时不能取消托管）
+  for (const member of room.members) setAuto(room, member.playerId, false);
+  room.timeouts.clear();
   emitRoomUpdate(room);
 }
 
@@ -513,8 +520,10 @@ function runBot(room: RoomState, playerId: string, key: string): void {
     command = baselineCommand(view, playerId);
   }
   if (!command) return;
+  // 托管、离线的真人由人机代打：标成代做（规则 C 那一步界面显示「代选」）；人机座位自己的动作不标
+  const member = room.members.find((candidate) => candidate.playerId === playerId);
   try {
-    room.game = applyCommand(game, playerId, command);
+    room.game = applyCommand(game, playerId, command, { auto: member?.bot !== true });
   } catch (error) {
     console.error("人机行动失败", error);
     return;
@@ -536,7 +545,18 @@ function expireTurn(room: RoomState, key: string): void {
       if (count >= AUTO_AFTER_TIMEOUTS) setAuto(room, playerId, true);
     }
   }
-  room.game = timeoutTurn(game, timeoutPolicy);
+  try {
+    room.game = timeoutTurn(game, timeoutPolicy);
+  } catch (error) {
+    // 换了超时策略出错时退回基线，不能让计时器回调把整个进程弄挂
+    console.error("超时代做出错，改用基线", error);
+    try {
+      room.game = timeoutTurn(game);
+    } catch (fallbackError) {
+      console.error("基线超时代做也出错", fallbackError);
+      return;
+    }
+  }
   afterGameChange(room);
   emitRoomUpdate(room);
 }
@@ -660,7 +680,47 @@ function invalidNameMessage(payload: CreateRoomPayload | JoinRoomPayload): strin
  */
 const socketsBySession = new Map<string, Set<string>>();
 
+/**
+ * 每个事件除了回执以外有几个参数。客户端漏发回执、或者多发 / 少发参数时，按这个整理好再交给处理函数：
+ * 不整理的话，漏了回执的事件会在处理函数里调用 ack(...) 抛 TypeError，把整个服务器进程弄挂（所有房间一起断）。
+ * voice:signal 没有回执，不在表里。
+ */
+const EVENT_ARITY: Record<string, number> = {
+  "lobby:get": 0,
+  "room:create": 1,
+  "room:join": 1,
+  "room:start": 0,
+  "room:leave": 0,
+  "game:command": 1,
+  "room:chat": 1,
+  "room:rematch": 1,
+  "room:kick": 1,
+  "room:access": 1,
+  "room:options": 1,
+  "room:sit": 0,
+  "room:stand": 0,
+  "room:dissolve": 0,
+  "room:add-bot": 0,
+  "room:auto": 1,
+  "admin:verify": 1,
+  "admin:dissolve": 1,
+  "admin:kick-session": 1,
+  "voice:join": 1,
+  "voice:mute": 1,
+  "voice:leave": 0,
+};
+
 io.on("connection", (socket) => {
+  socket.use((packet, next) => {
+    const arity = EVENT_ARITY[packet[0] as string];
+    if (arity !== undefined) {
+      const args = packet.slice(1);
+      const ack = typeof args[args.length - 1] === "function" ? args.pop() : () => {};
+      const fixed = Array.from({ length: arity }, (_, index) => args[index]);
+      packet.splice(1, packet.length - 1, ...fixed, ack);
+    }
+    next();
+  });
   const loginSession = socket.handshake.headers["x-gc-session"];
   if (typeof loginSession === "string" && loginSession) {
     const sockets = socketsBySession.get(loginSession) ?? new Set<string>();
@@ -996,6 +1056,14 @@ io.on("connection", (socket) => {
   });
 
   socket.on("game:command", (command, ack) => {
+    const second = Math.floor(Date.now() / 1000);
+    const counter = commandCounts.get(socket.id);
+    if (counter && counter.second === second) counter.count += 1;
+    else commandCounts.set(socket.id, { second, count: 1 });
+    if ((commandCounts.get(socket.id)?.count ?? 0) > COMMAND_RATE_LIMIT) {
+      ack({ ok: false, error: "操作太快了，请稍等一下。" });
+      return;
+    }
     const room = findRoomForSocket(socket.id);
     if (!room || room.status !== "playing" || !room.game) {
       ack({ ok: false, error: "当前没有进行中的对局。" });
@@ -1229,6 +1297,7 @@ io.on("connection", (socket) => {
 
   socket.on("disconnect", () => {
     roomChatTimes.delete(socket.id);
+    commandCounts.delete(socket.id);
     adminFailureTimes.delete(socket.id);
     removeWaitingMember(socket.id);
   });

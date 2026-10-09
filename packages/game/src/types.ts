@@ -93,15 +93,20 @@ export interface FinalResult {
   readonly reason: "target" | "rounds";
 }
 
+/**
+ * 玩家的动作。每个动作都可以带 step：发出时自己看到的 stepKey(game)（「局:手:阶段」）。
+ * 带了而且和服务器当前的对不上（比如这一手已经超时亮牌了、点击才到），就拒绝，免得迟到的点击落到下一手。
+ * 网页发动作时一定要带；测试、脚本可以不带。
+ */
 export type GameCommand =
   /** 选牌（确认）。已经选过时再发就是改选。 */
-  | { readonly type: "select"; readonly card: number }
+  | { readonly type: "select"; readonly card: number; readonly step?: string }
   /** 撤回已选的牌；最后一个人确认前都可以。 */
-  | { readonly type: "unselect" }
+  | { readonly type: "unselect"; readonly step?: string }
   /** 规则 C：选一排收走（0–3），只有 chooser 能发。 */
-  | { readonly type: "chooseRow"; readonly row: number }
+  | { readonly type: "chooseRow"; readonly row: number; readonly step?: string }
   /** 局末点「继续」；所有人都点了就立刻发下一局，否则等超时。 */
-  | { readonly type: "nextRound" };
+  | { readonly type: "nextRound"; readonly step?: string };
 
 export type GameEvent =
   /** 有人选好了（不含牌面）。改选也发这个。 */
@@ -137,7 +142,7 @@ export type GameEvent =
   /** 超时：这些人由系统代做了这一步（选牌 / 选排 / 局末继续）。 */
   | { readonly type: "TimedOut"; readonly phase: Phase; readonly players: string[] };
 
-/** 服务端记的动作序列：同一种子按顺序重放就能复现整局。auto = 超时代做。 */
+/** 服务端记的动作序列（整理过的动作，不含 step）：同一种子按顺序重放就能复现整局。auto = 超时 / 托管 / 离线时代做。 */
 export interface LogEntry {
   readonly player: string;
   readonly command: GameCommand;

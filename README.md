@@ -11,7 +11,7 @@
 ```bash
 npm install
 npm run dev          # 服务端 :3015，网页 :5188（WEB_PORT / SERVER_PORT 可改，见下）
-npm test             # 135 个测试：规则书 TC1–TC13、例 1/2、补充文件的局面、2–10 人各 300 局随机对局、隐藏信息、服务器全流程
+npm test             # 146 个测试：规则书 TC1–TC13、例 1/2、补充文件的局面、2–10 人各 300 局随机对局、隐藏信息、服务器全流程
 npm run typecheck
 BASE_PATH=/niutou/ npm run build
 ```
@@ -98,6 +98,8 @@ BASE_PATH=/niutou/ npm run build
 
 ### 动作（`GameCommand`，`socket.emit("game:command", 动作, ack)`）
 
+**网页发每个动作都要带 `step: stepKey(game)`**（发出时自己看到的「局:手:阶段」）。选牌是同时进行的：这一手可能刚好超时亮牌、或者人机替别人选完了，点击才到；带着 step 的话服务器发现对不上就拒绝（「这一手已经结算了」），不会把这次点击当成下一手的选择。不带 step 也接受（测试、脚本用）。服务器收到的动作先过 `normalizeCommand` 整理，只留规则要用的字段。同一个连接每秒最多 20 个动作。
+
 | 动作 | 什么时候 | 说明 |
 |---|---|---|
 | `{ type: "select", card }` | `select` 阶段，牌在自己手里 | 选好（确认）。已选好时再发另一张就是改选；最后一人选好就亮牌 |
@@ -118,7 +120,8 @@ BASE_PATH=/niutou/ npm run build
 ### 函数
 
 - 规则：`bullheads(card)`、`sumBulls(cards)`、`rowsBulls(rows)`、`targetRow(rows, card)`（规则 A，规则 C 返回 `null`）、`placeCard(rows, play)`、`takeLowRow(rows, play, row)`、`resolvePlays(rows, plays, chooser?)`（从小到大逐张结算，没给 chooser 遇到规则 C 就停下）、`cardsInPlay(人数, tactics)`。
-- 引擎：`createGame(players, seed?, options?, overrides?)`、`apply(state, 座位, 动作, rng)`（纯函数，不改输入）、`applyCommand(state, 座位, 动作)`（服务器用，rng 存在 state 里）、`timeoutTurn(state, policy?)`、`legalActions`、`waitingFor`、`stepKey`、`normalizeOptions`、`redactGameForViewer(state, 座位)`、`redactGameForSpectator(state, seeAll)`。
+- 引擎：`createGame(players, seed?, options?, overrides?)`、`apply(state, 座位, 动作, rng)`（纯函数，不改输入）、`applyCommand(state, 座位, 动作, { auto? })`（服务器用，rng 存在 state 里；`auto` 表示托管 / 离线时人机代做，规则 C 那一步会标 `auto`）、`timeoutTurn(state, policy?)`、`legalActions`、`waitingFor`、`stepKey`、`normalizeCommand`、`normalizeOptions`、`redactGameForViewer(state, 座位)`、`redactGameForSpectator(state, seeAll)`。
+- 检查：`stateProblems(state)` 查一个服务端状态像不像真实对局（牌守恒、桌上的牌数和第几手对得上、本局牛头 = 收牌堆、累计 = 各局之和、各阶段约束、等着的人有合法动作），返回问题列表。`buildGame` 不强制这些，造完可以拿它查；所有命名场景都通过。
 - 基线：`baselineCommand(视角, 座位)`、`baselineCard(hand, rows)`、`baselineRow(rows)`（超时代打和人机对照用）。
 - 人机：`botCommand(视角, 座位)`（现在是占位，人机阶段换掉）。
 
@@ -148,8 +151,11 @@ playHand(state, plays: Record<座位, 牌> | 牌[]（按座位）, choose?: 排�
   // 所有人出指定的牌（没给的人按基线），最后一人确认时亮牌；规则 C 给了 choose 就顺手选掉，没给就停在 chooseRow
 chooseRowFor(state, row): GameState        // 规则 C 时替 chooser 选排
 autoPlayHands(state, n): GameState         // 所有人按基线连打 n 手
-revealFrames(state): { rows; step }[]      // 最近一次亮牌拆成逐张的画面（第 0 帧是亮牌时的 4 排）
-revealAt(state, k): GameState              // 「动画放到第 k 张」的画面（拼出来的，只用来截图）
+revealFrames(state): RevealFrame[]         // 最近一次亮牌拆成逐张的画面：{ rows, step, taken: {座位: 牌[]}, roundBulls: {座位: 牛头} }
+                                           // 第 0 帧是亮牌时的 4 排；收牌堆、本局牛头也是放到这一帧时的
+revealAt(state, k): GameState              // 「动画放到第 k 张」的画面：4 排、收牌堆、本局牛头倒回第 k 帧；
+                                           // 阶段、第几手、累计保持结算完的值（真实客户端放动画时手里也是这些）。只用来截图
+stateProblems(state): string[]             // 造出来的局面和真实对局对不对得上
 
 // 包成网页收到的房间快照（status = playing）；成员连接 id 是 sock-<座位>，预览页冒充 p1：
 // Object.defineProperty(socket, "id", { get: () => "sock-p1" })
@@ -190,6 +196,7 @@ createSceneRoom(game, opts?: {
 和别的游戏一样（建房、加入、重连、踢人、解散、再来一局、聊天、语音、观战、管理员解散、挤登录、加人机、托管），谁是牛头王多了：
 
 - `room:create` 的 payload 可以带 `options: Partial<GameOptions>`（不合法就拒绝，错误原样返回）；人数 2–10。
+- 每个事件的参数在进处理函数前按固定个数整理（`EVENT_ARITY`），漏发回执的补一个空函数：模板里漏发回执会让 `ack(...)` 抛错、整个服务进程崩溃。
 - `room:options`（房主、等候时）：改开房选项，`fixedRounds: null` 表示不固定。
 - 快照 `LobbyRoomSnapshot.options`、首页列表 `PublicRoomSummary.options`；列表里 `score` 是累计罚分（局中含本局已收的牛头），`isActive` 是「还在等他做决定」，`isWinner` 是共同获胜者之一。
 - `turnRemainingMs`：当前这一步的剩余毫秒（选牌时大家共用一个倒计时）；终局时没有。

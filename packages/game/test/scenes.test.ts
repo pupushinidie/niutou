@@ -11,6 +11,8 @@ import {
   revealFrames,
   SCENE_DESCRIPTIONS,
   SCENE_NAMES,
+  stateProblems,
+  sumBulls,
   waitingFor,
 } from "../src/index.js";
 
@@ -126,6 +128,7 @@ describe("预览局面#房间快照", () => {
     expect(room.game!.players[0]!.hand).toHaveLength(10);
     expect(room.game!.players.slice(1).every((player) => player.hand.length === 0)).toBe(true);
     expect(room.turnRemainingMs).toBe(30_000);
+    expect(room.code).toMatch(/^[A-HJ-NP-Z2-9]{6}$/);
     expect((room.game as unknown as Record<string, unknown>).deck).toBeUndefined();
   });
 
@@ -159,5 +162,45 @@ describe("预览局面#和引擎的不变量一致", () => {
   it("2 人局的 selectSome：对手已选、我没选", () => {
     const state = createScene("selectSome", { players: 2 });
     expect(state.players.map((player) => player.selected)).toEqual([false, true]);
+  });
+});
+
+describe("预览局面#张数和真实对局对得上、动画帧", () => {
+  it("每个场景都过 stateProblems（桌上的牌数和第几手对得上、牌守恒、累计 = 各局之和……）", () => {
+    for (const name of SCENE_NAMES) expect(stateProblems(createScene(name)), name).toEqual([]);
+    for (const players of [2, 3, 5, 10]) {
+      for (const name of ["opening", "selectSome", "selectedMine", "waitingOne", "midRound", "timeout"] as const) {
+        expect(stateProblems(createScene(name, { players })), `${name} ${players} 人`).toEqual([]);
+      }
+    }
+  });
+
+  it("stateProblems 能查出不一致：buildGame 随手摆的局面桌上牌数和第几手对不上", () => {
+    const loose = buildGame({ players: 4, rows: [[10, 13], [20, 21, 23, 24, 25], [40, 44, 48], [63]] });
+    expect(stateProblems(loose).some((problem) => problem.includes("没发的牌"))).toBe(true);
+    const tactics = buildGame({ players: 3, options: { tactics: true }, turn: 3 });
+    expect(stateProblems(tactics).some((problem) => problem.includes("没发的牌"))).toBe(true);
+  });
+
+  it("revealFrames 的每一帧都带收牌堆和本局牛头：收牌那一步之前没算进来", () => {
+    const state = createScene("reveal");
+    const frames = revealFrames(state);
+    const takeAt = frames.findIndex((frame) => frame.step?.kind === "sixth");
+    const taker = frames[takeAt]!.step!.player;
+    expect(frames[takeAt - 1]!.taken[taker]).toEqual(state.players.find((player) => player.id === taker)!.taken.slice(0, -5));
+    expect(frames[takeAt]!.taken[taker]).toEqual(state.players.find((player) => player.id === taker)!.taken);
+    expect(frames.at(-1)!.roundBulls[taker]).toBe(state.players.find((player) => player.id === taker)!.roundBulls);
+  });
+
+  it("revealAt 不会让同一张牌同时在排上和收牌堆里", () => {
+    for (const name of ["reveal", "afterChooseRow", "doubleSixth", "roundEnd", "gameOver", "tenPlayersReveal"] as const) {
+      const state = createScene(name);
+      for (let k = 0; k < revealFrames(state).length; k += 1) {
+        const frame = revealAt(state, k);
+        const all = [...frame.rows.flat(), ...frame.players.flatMap((player) => player.taken)];
+        expect(new Set(all).size, `${name} 第 ${k} 帧`).toBe(all.length);
+        for (const player of frame.players) expect(player.roundBulls).toBe(sumBulls(player.taken));
+      }
+    }
   });
 });

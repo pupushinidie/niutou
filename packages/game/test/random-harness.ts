@@ -13,6 +13,7 @@ import {
   redactGameForViewer,
   resolvePlays,
   ROW_LIMIT,
+  stateProblems,
   sumBulls,
   targetRow,
   timeoutTurn,
@@ -56,8 +57,10 @@ function sameSet(left: number[], right: number[]): boolean {
   return a.every((value, index) => value === b[index]);
 }
 
-/** 检查一个状态；有问题返回说明。 */
+/** 检查一个状态；有问题返回说明。先过对外的 stateProblems（顺便验证它在真实对局里不误报），再查下面这些。 */
 function check(state: GameState, previous: GameState | null): string | null {
+  const problems = stateProblems(state);
+  if (problems.length > 0) return `stateProblems：${problems.join("；")}`;
   const n = state.players.length;
   const pool = cardsInPlay(n, state.config.tactics);
   const reveal = state.reveal;

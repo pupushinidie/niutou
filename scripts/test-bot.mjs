@@ -13,7 +13,7 @@
 //   ADD_BOTS=n     建房后再让服务器加 n 个人机（咕噜一号…）
 //   TARGET=33 ROUNDS=3 TACTICS=1   建房时的开房选项（目标分、固定局数、战术模式）
 import { io } from "socket.io-client";
-import { baselineCommand, legalActions, redactGameForViewer, waitingFor } from "../packages/game/dist/index.js";
+import { baselineCommand, legalActions, redactGameForViewer, stepKey, waitingFor } from "../packages/game/dist/index.js";
 
 const URL = process.env.SERVER_URL ?? "http://localhost:3015";
 const PATH = process.env.SOCKET_PATH ?? "/socket.io";
@@ -66,8 +66,9 @@ function bot(name, onRoom) {
       const again = fresh && fresh.version !== game.version ? choose(fresh, seat) : command;
       if (again) {
         if (again.type === "unselect") unselects += 1;
-        const result = await emit("game:command", again);
-        if (!result.ok) console.log(name, "行动失败", result.error);
+        // 带上自己看到的这一步：这一手已经结算了的话服务器会拒绝，不会落到下一手
+        const result = await emit("game:command", { ...again, step: stepKey(fresh ?? game) });
+        if (!result.ok && !result.error.includes("已经结算")) console.log(name, "行动失败", result.error);
       }
     } finally {
       acting = false;

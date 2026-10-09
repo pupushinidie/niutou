@@ -12,6 +12,7 @@ import {
   createGame,
   createRng,
   legalActions,
+  normalizeCommand,
   normalizeOptions,
   playHand,
   stepKey,
@@ -293,5 +294,45 @@ describe("开房变体", () => {
     expect(() => createGame([{ id: "a", name: "甲" }])).toThrow("2–10");
     expect(() => createGame(Array.from({ length: 11 }, (_, index) => ({ id: `p${index}`, name: `x${index}` })))).toThrow("2–10");
     expect(() => createGame([{ id: "a", name: "甲" }, { id: "a", name: "乙" }])).toThrow("重复");
+  });
+});
+
+describe("迟到的点击和动作整理", () => {
+  it("动作带 step：和当前这一步对不上就拒绝（这一手已经亮牌了，点击才到），对得上照常", () => {
+    const start = buildGame({ players: [{ include: [12, 16] }, { include: [27] }], rows: [[10], [25], [40], [63]] });
+    const seen = stepKey(start);
+    // 乙选好，甲超时被代出 → 进入第 2 手
+    const next = timeoutTurn(applyCommand(start, 乙, { type: "select", card: 27 }));
+    expect(next.turn).toBe(2);
+    // 甲按第 1 手看到的局面点了 16：拒绝，不会变成第 2 手的选择
+    const late = next.players[0]!.hand.includes(16) ? 16 : next.players[0]!.hand[0]!;
+    expect(() => applyCommand(next, 甲, { type: "select", card: late, step: seen })).toThrow("已经结算");
+    expect(() => applyCommand(next, 甲, { type: "unselect", step: seen })).toThrow("已经结算");
+    // 带上当前的 step 照常
+    const ok = applyCommand(next, 甲, { type: "select", card: late, step: stepKey(next) });
+    expect(ok.players[0]!.selection).toBe(late);
+  });
+
+  it("客户端多塞的字段一概丢掉：不影响校验，也不进动作序列；step 不记进序列", () => {
+    const start = createGame(three, 4);
+    const card = start.players[0]!.hand[0]!;
+    const junk = { type: "select", card, step: stepKey(start), padding: "x".repeat(10_000), nested: { a: 1 } } as unknown as Parameters<typeof applyCommand>[2];
+    const state = applyCommand(start, 甲, junk);
+    expect(state.log!.at(-1)).toEqual({ player: 甲, command: { type: "select", card } });
+    expect(JSON.stringify(state.log).length).toBeLessThan(200);
+    expect(normalizeCommand({ type: "chooseRow", row: 2, extra: [1, 2, 3] })).toEqual({ type: "chooseRow", row: 2 });
+    expect(normalizeCommand({ type: "nextRound", step: "x".repeat(100) })).toEqual({ type: "nextRound" });
+    expect(() => normalizeCommand(null)).toThrow();
+    expect(() => normalizeCommand({ type: "fly" })).toThrow("未知的行动");
+    expect(() => applyCommand(start, 甲, { type: "select", card: "12" } as unknown as Parameters<typeof applyCommand>[2])).toThrow("不在你手里");
+  });
+
+  it("applyCommand 的 auto：托管 / 离线代选的规则 C 标成 auto", () => {
+    const waiting = playOnRows([[10, 13], [25], [40, 44, 48], [63]], [4, 7]);
+    const state = applyCommand(waiting, 甲, { type: "chooseRow", row: 3 }, { auto: true });
+    expect(state.reveal!.steps[0]!.auto).toBe(true);
+    expect(state.events[0]).toMatchObject({ type: "RowTaken", auto: true });
+    expect(state.log!.at(-1)!.auto).toBe(true);
+    expect(applyCommand(waiting, 甲, { type: "chooseRow", row: 3 }).reveal!.steps[0]!.auto).toBeUndefined();
   });
 });

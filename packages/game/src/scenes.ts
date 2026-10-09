@@ -200,26 +200,62 @@ export function chooseRowFor(state: GameState, row: number): GameState {
   return applyCommand(state, state.chooser, { type: "chooseRow", row });
 }
 
-/** 一次亮牌的逐张画面：第 0 帧是亮牌时的 4 排，之后每结算一张一帧（带这一步的结果）。 */
-export function revealFrames(state: GameState): { rows: number[][]; step: ResolveStep | null }[] {
-  const reveal = state.reveal;
-  if (!reveal) return [];
-  return [
-    { rows: reveal.rowsBefore.map((row) => [...row]), step: null },
-    ...reveal.steps.map((step) => ({ rows: step.rows.map((row) => [...row]), step })),
-  ];
+/** 亮牌动画的一帧：这时的 4 排、这一步（第 0 帧没有）、这时每人本局收的牌和牛头。 */
+export interface RevealFrame {
+  readonly rows: number[][];
+  readonly step: ResolveStep | null;
+  /** 座位 → 放到这一帧时本局收的牌（后面几步才收的还没算进来）。 */
+  readonly taken: Record<string, number[]>;
+  /** 座位 → 放到这一帧时本局的牛头。 */
+  readonly roundBulls: Record<string, number>;
 }
 
 /**
- * 给截图用的「动画放到第 k 张」的画面：4 排是第 k 帧，reveal.steps 只留前 k 步、done = false。
- * 这是拼出来的画面，不是能继续打的局面（不要再拿去 apply）。
+ * 最近一次亮牌的逐张画面：第 0 帧是亮牌时的 4 排，之后每结算一张一帧。
+ * 真实客户端放动画时手里拿的是结算完的状态，按帧画 4 排和收牌堆就行（累计罚分、阶段在动画放完前先别换）。
+ */
+export function revealFrames(state: GameState): RevealFrame[] {
+  const reveal = state.reveal;
+  if (!reveal) return [];
+  const taken = Object.fromEntries(state.players.map((player) => [player.id, [...player.taken]]));
+  // 从结算完的收牌堆往回倒：先去掉这次亮牌里收的牌，得到第 0 帧
+  for (const step of reveal.steps) {
+    if (step.taken.length === 0) continue;
+    const pile = taken[step.player]!;
+    taken[step.player] = pile.slice(0, pile.length - step.taken.length);
+  }
+  const frames: RevealFrame[] = [];
+  const snapshot = (rows: number[][], step: ResolveStep | null) => {
+    frames.push({
+      rows: rows.map((row) => [...row]),
+      step,
+      taken: Object.fromEntries(Object.entries(taken).map(([id, pile]) => [id, [...pile]])),
+      roundBulls: Object.fromEntries(Object.entries(taken).map(([id, pile]) => [id, sumBulls(pile)])),
+    });
+  };
+  snapshot(reveal.rowsBefore, null);
+  for (const step of reveal.steps) {
+    if (step.taken.length > 0) taken[step.player] = [...taken[step.player]!, ...step.taken];
+    snapshot(step.rows, step);
+  }
+  return frames;
+}
+
+/**
+ * 给截图用的「动画放到第 k 张」的画面：4 排、每人收牌堆和本局牛头倒回第 k 帧，reveal.steps 只留前 k 步、done = false。
+ * 阶段、第几手、累计罚分、局末结算保持结算完的值（真实客户端放动画时手里也是这些）。只用来画图，不要再拿去 apply。
  */
 export function revealAt(state: GameState, k: number): GameState {
   const frames = revealFrames(state);
   if (frames.length === 0) throw new Error("这个局面没有亮牌。");
   const index = Math.max(0, Math.min(k, frames.length - 1));
+  const frame = frames[index]!;
   const next = structuredClone(state);
-  next.rows = frames[index]!.rows;
+  next.rows = frame.rows.map((row) => [...row]);
+  for (const player of next.players) {
+    player.taken = [...frame.taken[player.id]!];
+    player.roundBulls = frame.roundBulls[player.id]!;
+  }
   next.reveal!.steps = next.reveal!.steps.slice(0, index);
   next.reveal!.done = false;
   return next;
@@ -263,7 +299,7 @@ export const SCENE_DESCRIPTIONS: Record<SceneName, string> = {
   selectSome: "选牌中：有人已选好，我还没选",
   selectedMine: "选牌中：我已选好（可撤回），还有人在想",
   waitingOne: "选牌中：只差一个人没选",
-  midRound: "一局打到一半（第 5 手）：排有长有短，收牌堆有牌",
+  midRound: "一局打到一半（第 5 手前后）：排有长有短，有人收过牌",
   reveal: "刚亮牌：有接上去的、有人放第六张收走 5 张（用 revealFrames 逐张放）",
   chooseRow: "规则 C：我的 4 比所有排尾都小，等我选排（规则书例 1）",
   chooseRowOther: "规则 C：等别人（阿牛）选排",
@@ -290,8 +326,35 @@ function names(count: number): PlayerSpec[] {
   return Array.from({ length: count }, (_, index) => defaultPlayer(index));
 }
 
-/** 规则书例 1 的局面：4 排 [10,13] [20,21,23,24,25] [40,44,48] [63]。 */
+/**
+ * 规则书例 1 的局面：4 排 [10,13] [20,21,23,24,25] [40,44,48] [63]，摆在 4 人局第 3 手
+ * （桌上 11 张 + 丁收过的 [6] = 4 + 4×2 张，和真实对局的张数对得上）。
+ */
 const EXAMPLE_ROWS = [[10, 13], [20, 21, 23, 24, 25], [40, 44, 48], [63]];
+function exampleOne(firstCards: [number, number, number, number]): GameState {
+  return buildGame({
+    players: firstCards.map((card, index) => (index === 3 ? { include: [card], taken: [6] } : { include: [card] })),
+    rows: EXAMPLE_ROWS,
+    turn: 3,
+  });
+}
+
+/**
+ * 4 人局第 3 局（或指定局）第 10 手：每人剩 1 张（77 / 36 / 92 / 3），收牌堆各有若干张，桌上一共 40 张。
+ * 丁的 3 比所有排尾都小（规则 C）。totals 是之前各局的累计。
+ */
+function lateRound(totals: [number, number, number, number], round: number): GameState {
+  return buildGame({
+    players: [
+      { hand: [77], total: totals[0], taken: [5, 15, 1, 2, 4, 6, 7] },
+      { hand: [36], total: totals[1], taken: [8, 9, 12, 13] },
+      { hand: [92], total: totals[2], taken: [44, 45, 46, 47, 49, 16, 17, 19, 21, 23] },
+      { hand: [3], total: totals[3], taken: [60, 24, 27, 28, 31] },
+    ],
+    rows: [[18, 22, 26, 29], [33, 34], [51, 52, 53, 56, 58], [70, 72, 74]],
+    round,
+  });
+}
 
 /** 按名字造局面（完整的服务端状态；给界面前用 redactGameForViewer(state, "p1")，或者用 createSceneRoom）。 */
 export function createScene(name: SceneName, opts: SceneOptions = {}): GameState {
@@ -313,75 +376,39 @@ export function createScene(name: SceneName, opts: SceneOptions = {}): GameState
       return select(opening(), ["p1", "p3"].filter((id) => Number(id.slice(1)) <= Math.max(1, count - 1)));
     case "waitingOne":
       return select(opening(), names(count).slice(0, -1).map((player) => player.id!));
-    case "midRound":
-      return autoPlayHands(opening(), 4);
+    case "midRound": {
+      // 打到第 5 手；还没人收过牌就再多打几手
+      let state = autoPlayHands(opening(), 4);
+      while (state.phase === "select" && state.turn < 8 && state.players.every((player) => player.taken.length === 0)) state = autoPlayHands(state, 1);
+      return state;
+    }
     case "reveal":
       // 14 接第 1 排；30 放进已满的第 2 排 → 阿牛收 8 分；50 接第 3 排；64 接第 4 排
-      return playHand(
-        buildGame({ players: [{ include: [50] }, { include: [30] }, { include: [14] }, { include: [64] }], rows: EXAMPLE_ROWS }),
-        { p1: 50, p2: 30, p3: 14, p4: 64 },
-      );
+      return playHand(exampleOne([50, 30, 14, 64]), { p1: 50, p2: 30, p3: 14, p4: 64 });
     case "chooseRow":
-      return playHand(
-        buildGame({ players: [{ include: [4] }, { include: [7] }, { include: [30] }, { include: [50] }], rows: EXAMPLE_ROWS }),
-        { p1: 4, p2: 7, p3: 30, p4: 50 },
-      );
+      return playHand(exampleOne([4, 7, 30, 50]), { p1: 4, p2: 7, p3: 30, p4: 50 });
     case "chooseRowOther":
-      return playHand(
-        buildGame({ players: [{ include: [7] }, { include: [4] }, { include: [30] }, { include: [50] }], rows: EXAMPLE_ROWS }),
-        { p1: 7, p2: 4, p3: 30, p4: 50 },
-      );
+      return playHand(exampleOne([7, 4, 30, 50]), { p1: 7, p2: 4, p3: 30, p4: 50 });
     case "afterChooseRow":
       return chooseRowFor(createScene("chooseRow"), 3);
     case "doubleSixth":
       // 第 2 排已满：26 先放成第六张（我收 8 分），27 再接到 26 后面
       return playHand(
-        buildGame({ players: [{ include: [26] }, { include: [27] }, { include: [41] }], rows: [[10], [20, 21, 23, 24, 25], [40], [63]] }),
+        // 3 人局第 3 手：桌上 8 张 + 丙收过的 [2, 3] = 4 + 3×2 张
+        buildGame({ players: [{ include: [26] }, { include: [27] }, { include: [41], taken: [2, 3] }], rows: [[10], [20, 21, 23, 24, 25], [40], [63]], turn: 3 }),
         { p1: 26, p2: 27, p3: 41 },
       );
     case "lastHand":
-      return buildGame({
-        players: [
-          { hand: [77], total: 21, taken: [5, 15] },
-          { hand: [36], total: 9, taken: [] },
-          { hand: [92], total: 30, taken: [44, 45, 46, 47, 49] },
-          { hand: [3], total: 14, taken: [60] },
-        ],
-        rows: [[18, 22, 26, 29], [33, 34], [51, 52, 53, 56, 58], [70, 72, 74]],
-        round: 3,
-      });
+      return lateRound([21, 9, 30, 14], 3);
     case "roundEnd":
-      return playHand(createScene("lastHand"), { p1: 77, p2: 36, p3: 92, p4: 3 }, 1);
+      // 丁出 3 收第 2 排 [33,34]；本局 9 / 4 / 15 / 13 → 累计 30 / 13 / 45 / 27，没人到 66
+      return playHand(lateRound([21, 9, 30, 14], 3), { p1: 77, p2: 36, p3: 92, p4: 3 }, 1);
     case "gameOver":
-      return playHand(
-        buildGame({
-          players: [
-            { hand: [77], total: 40, taken: [5, 15] },
-            { hand: [36], total: 52, taken: [11] },
-            { hand: [92], total: 58, taken: [44, 45, 46, 47, 49] },
-            { hand: [3], total: 33, taken: [60] },
-          ],
-          rows: [[18, 22, 26, 29], [33, 34], [51, 52, 53, 56, 58], [70, 72, 74]],
-          round: 6,
-        }),
-        { p1: 77, p2: 36, p3: 92, p4: 3 },
-        1,
-      );
+      // 累计 40 / 52 / 58 / 33 → 49 / 56 / 73 / 46：丙过 66，丁一人获胜
+      return playHand(lateRound([40, 52, 58, 33], 6), { p1: 77, p2: 36, p3: 92, p4: 3 }, 1);
     case "gameOverTie":
-      return playHand(
-        buildGame({
-          players: [
-            { hand: [77], total: 30, taken: [5, 15] },
-            { hand: [36], total: 34, taken: [] },
-            { hand: [92], total: 58, taken: [44, 45, 46, 47, 49] },
-            { hand: [3], total: 61, taken: [60] },
-          ],
-          rows: [[18, 22, 26, 29], [33, 34], [51, 52, 53, 56, 58], [70, 72, 74]],
-          round: 6,
-        }),
-        { p1: 77, p2: 36, p3: 92, p4: 3 },
-        1,
-      );
+      // 累计 30 / 35 / 58 / 61 → 39 / 39 / 73 / 74：我和阿牛并列获胜
+      return playHand(lateRound([30, 35, 58, 61], 6), { p1: 77, p2: 36, p3: 92, p4: 3 }, 1);
     case "tenPlayers":
       return select(createGame(names(10).map((player) => ({ id: player.id!, name: player.name! })), seed), ["p2", "p4", "p5", "p7", "p9"]);
     case "tenPlayersReveal":
@@ -448,7 +475,7 @@ export function createSceneRoom(game: GameState, opts: SceneRoomOptions = {}): L
     : config.roundEndSec * 1000;
   const view = opts.spectator ? redactGameForSpectator(game, opts.seeAll === true) : redactGameForViewer(game, viewer);
   return {
-    code: opts.spectator ? "" : "NIU666",
+    code: opts.spectator ? "" : "NTW688",
     spectators: opts.spectator ? [{ id: "sock-watcher", name: "看客" }] : [],
     access: { ...DEFAULT_ROOM_ACCESS, ...(opts.seeAll ? { spectatorsSeeAll: true } : {}) },
     options: { target: config.target, fixedRounds: config.fixedRounds, tactics: config.tactics },

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
   bullheads,
   legalActions,
+  stepKey,
   sumBulls,
   waitingFor,
   type GameCommand,
@@ -89,8 +90,10 @@ function Card({ card, dim = false }: { card: number; dim?: boolean }) {
   );
 }
 
-function GameBoard({ room, busy, error, notice, brand, connection, themeToggle, chat, onCommand, onRematch, onAuto, onDissolve, watchId, onWatch, onLeave }: GameBoardProps) {
+function GameBoard({ room, busy, error, notice, brand, connection, themeToggle, chat, onCommand: sendCommand, onRematch, onAuto, onDissolve, watchId, onWatch, onLeave }: GameBoardProps) {
   const game = room.game!;
+  // 每个动作都带上自己看到的这一步（stepKey）：这一手已经结算了、点击才到的话，服务器会拒绝，不会落到下一手
+  const onCommand = (command: GameCommand) => sendCommand({ ...command, step: stepKey(game) });
   const member = room.members.find((candidate) => candidate.id === socket.id);
   const spectating = !member;
   const myId = member?.playerId ?? watchId;

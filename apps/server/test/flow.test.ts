@@ -3,7 +3,7 @@
  * 计时 key（别人选牌不重置倒计时）、原昵称重连、管理员解散、首页列表、每个连接收到的数据里没有别人的牌。
  */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { buildGame, legalActions, type GameState, type LobbyRoomSnapshot } from "@niutou/game";
+import { buildGame, legalActions, stepKey, type GameState, type LobbyRoomSnapshot } from "@niutou/game";
 import { call, command, delay, join, ok, seatOf, startServer, updateWhere, type Harness, type TestSocket } from "./harness.js";
 
 // 管理员口令、人机立刻行动要在服务器 import 之前设好。不设 TURN_MS：用真实的 30 秒限时，超时用 testHooks 触发。
@@ -289,6 +289,69 @@ describe("服务器全流程", () => {
     expect((await closed).every((reason) => reason.includes("管理员"))).toBe(true);
     const after = await ok(call<import("@niutou/game").PublicRoomSummary[]>((ack) => admin.emit("lobby:get", ack)));
     expect(after.some((room) => room.id === target.id)).toBe(false);
+  });
+
+  it("迟到的点击：带着上一手的 step 发来的选牌被拒绝，不会落到下一手，也不清超时次数", async () => {
+    const { code, host, a, b, names } = await threeSeats();
+    await ok(call<LobbyRoomSnapshot>((ack) => host.emit("room:start", ack)));
+    await updateWhere(h, b, (snapshot) => snapshot.game !== undefined);
+    inject(code, names, { players: [{ hand: [12, 90] }, { hand: [27, 91] }, { hand: [41, 92] }], rows: [[10], [25], [40], [63]] });
+    const before = await updateWhere(h, host, (snapshot) => snapshot.game?.turn === 9);
+    const seen = stepKey(before.game!);
+    await ok(command(a, { type: "select", card: 27 }, h));
+    await ok(command(b, { type: "select", card: 41 }, h));
+    h.server.testHooks.expireTurn(code);
+    await updateWhere(h, host, (snapshot) => snapshot.game?.turn === 10);
+    const late = await command(host, { type: "select", card: 90, step: seen }, h);
+    expect(late.ok).toBe(false);
+    expect(late.ok ? "" : late.error).toContain("已经结算");
+    const now = gameOf(a);
+    expect(now.players[0]!.selected).toBe(false);
+    // 带当前的 step 就照常
+    await ok(command(host, { type: "select", card: meIn(host).hand[0]!, step: stepKey(gameOf(host)) }, h));
+    await ok(call<void>((ack) => host.emit("room:dissolve", ack)));
+  });
+
+  it("托管、离线由人机代选的规则 C 标成代选（auto）", async () => {
+    const { code, host, a, b, names } = await threeSeats();
+    await ok(call<LobbyRoomSnapshot>((ack) => host.emit("room:start", ack)));
+    await updateWhere(h, b, (snapshot) => snapshot.game !== undefined);
+    // 第 10 手，乙只剩一张 4（比所有排尾都小）
+    inject(code, names, { players: [{ hand: [60] }, { hand: [4] }, { hand: [70] }], rows: [[10, 13], [25], [40, 44, 48], [63]] });
+    await updateWhere(h, host, (snapshot) => snapshot.game?.turn === 10 && snapshot.game.rows[0]?.length === 2);
+    await ok(command(host, { type: "select", card: 60 }, h));
+    await ok(command(b, { type: "select", card: 70 }, h));
+    // 乙托管：人机替他出 4 → 停在选排 → 人机替他选排
+    await ok(call<void>((ack) => a.emit("room:auto", true, ack)));
+    const done = await updateWhere(h, host, (snapshot) => snapshot.game?.reveal?.done === true && snapshot.game.turn === 10);
+    const low = done.game!.reveal!.steps.find((step) => step.kind === "low")!;
+    expect(low).toMatchObject({ player: "p2", card: 4, auto: true });
+    await ok(call<void>((ack) => host.emit("room:dissolve", ack)));
+  });
+
+  it("刷动作限速：同一个连接一秒内超过 20 个动作就拒绝", async () => {
+    const { host } = await threeSeats();
+    await ok(call<LobbyRoomSnapshot>((ack) => host.emit("room:start", ack)));
+    const results = await Promise.all(Array.from({ length: 30 }, () => command(host, { type: "unselect" })));
+    expect(results.filter((result) => !result.ok && result.error.includes("太快")).length).toBeGreaterThan(0);
+    await delay(1_100);
+    await ok(call<void>((ack) => host.emit("room:dissolve", ack)));
+  });
+
+  it("客户端漏发回执、参数个数不对，服务器不会崩", async () => {
+    const rude = await h.connect();
+    const raw = rude as unknown as { emit: (...args: unknown[]) => void };
+    raw.emit("lobby:get");
+    raw.emit("game:command", { type: "select", card: 1 });
+    raw.emit("room:create", { name: "无礼的人", capacity: 2 });
+    raw.emit("room:start", "多余", "参数");
+    raw.emit("room:kick");
+    raw.emit("voice:signal");
+    await delay(200);
+    const still = await h.connect();
+    const rooms = await ok(call<import("@niutou/game").PublicRoomSummary[]>((ack) => still.emit("lobby:get", ack)));
+    expect(Array.isArray(rooms)).toBe(true);
+    expect(h.server.httpServer.listening).toBe(true);
   });
 
   it("抓包：整个流程里每个连接收到的数据都没有别人的手牌、已选未亮的牌、没发的牌和种子", () => {
