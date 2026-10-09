@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type CSSProperties, type FormEvent, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent, type ReactNode } from "react";
 import {
   CAPACITY_OPTIONS,
   DEFAULT_OPTIONS,
@@ -71,14 +71,39 @@ function App() {
     });
   }, [room === null]);
 
+  // 断线重连：新连接服务器不认识，用原昵称和房间码重新加入，回到自己的座位（服务器重启、房间没了就回首页说明原因）
+  const seatRef = useRef<{ name: string; code: string } | null>(null);
+  const roomRef = useRef<LobbyRoomSnapshot | null>(null);
+  roomRef.current = room;
+  const wasDisconnected = useRef(false);
   useEffect(() => {
     const handleConnect = () => {
       setConnected(true);
       socket.emit("lobby:get", (response) => {
         if (response.ok) setLobbyRooms(response.data);
       });
+      if (!wasDisconnected.current || !roomRef.current) return;
+      wasDisconnected.current = false;
+      const seat = seatRef.current;
+      if (!seat || !seat.code) {
+        setRoom(null);
+        setNotice("连接断了一下，请重新进入房间。");
+        return;
+      }
+      socket.emit("room:join", { name: seat.name, code: seat.code }, (response) => {
+        if (response.ok) {
+          setRoom(response.data);
+          setNotice("连接断了一下，已经回到座位。");
+        } else {
+          setRoom(null);
+          setNotice(`连接断开期间房间没了：${response.error}`);
+        }
+      });
     };
-    const handleDisconnect = () => setConnected(false);
+    const handleDisconnect = () => {
+      setConnected(false);
+      wasDisconnected.current = true;
+    };
     const handleRoomUpdate = (snapshot: LobbyRoomSnapshot) => setRoom((current) => (isStale(snapshot, current) ? current : snapshot));
     const handleRoomError = (message: string) => setError(message);
     const handleLobbyUpdate = (rooms: PublicRoomSummary[]) => setLobbyRooms(rooms);
@@ -132,6 +157,7 @@ function App() {
         return;
       }
       setRoom(response.data);
+      seatRef.current = { name: nickname, code: response.data.code };
       setNotice(spectate ? "正在观战。" : "已加入房间。");
     });
   }
@@ -150,6 +176,7 @@ function App() {
         return;
       }
       setRoom(response.data);
+      seatRef.current = { name: nickname, code: response.data.code };
       setNotice(mode === "create"
         ? "房间已创建，可以邀请朋友加入。"
         : response.data.status === "playing" ? "已回到对局，继续游戏吧。" : "已加入房间。");
