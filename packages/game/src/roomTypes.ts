@@ -1,8 +1,16 @@
-import type { GameCommand, GameState } from "./types.js";
+import type { GameCommand, GameOptions, GameState } from "./types.js";
 
-/** 房间人数：2–4 人（规格书第 1 节）。 */
-export const CAPACITY_OPTIONS = [2, 3, 4] as const;
+/** 房间人数：2–10 人（规则书第 8 节：基础规则 2–10 人通用）。 */
+export const CAPACITY_OPTIONS = [2, 3, 4, 5, 6, 7, 8, 9, 10] as const;
 export type Capacity = (typeof CAPACITY_OPTIONS)[number];
+
+/** 开房选项的范围（服务器按这个校验，界面按这个出选项）。 */
+export const OPTION_LIMITS = {
+	/** 目标分：10–200 的整数，默认 66。 */
+	target: { min: 10, max: 200, default: 66 },
+	/** 固定局数：1–20 的整数，或 null（不固定，默认）。 */
+	fixedRounds: { min: 1, max: 20, default: null },
+} as const;
 
 export interface LobbyMember {
 	readonly id: string;
@@ -40,6 +48,8 @@ export interface LobbyRoomSnapshot {
 	readonly code: string;
 	readonly spectators: Spectator[];
 	readonly access: RoomAccess;
+	/** 开房选项（目标分、固定局数、战术模式）；等候时房主可改，开局后固定。 */
+	readonly options: GameOptions;
 	readonly capacity: Capacity;
 	readonly status: "waiting" | "playing";
 	readonly members: LobbyMember[];
@@ -92,6 +102,8 @@ export interface SendRoomChatPayload {
 export interface CreateRoomPayload {
 	readonly name: string;
 	readonly capacity: Capacity;
+	/** 不给的项用默认值（66 分、不固定局数、不开战术）。 */
+	readonly options?: Partial<GameOptions>;
 }
 
 /** 用房间码加入，或者从首页列表按房间的公开 id 加入；spectate 为 true 时进来观战。 */
@@ -107,6 +119,7 @@ export interface PublicRoomSummary {
 	readonly id: string;
 	readonly status: "waiting" | "playing" | "finished";
 	readonly capacity: Capacity;
+	readonly options: GameOptions;
 	readonly open: boolean;
 	readonly allowSpectators: boolean;
 	readonly spectators: number;
@@ -115,6 +128,7 @@ export interface PublicRoomSummary {
 		readonly isHost: boolean;
 		readonly connected: boolean;
 		readonly bot?: boolean;
+		/** 累计罚分（含本局已收的牛头）。 */
 		readonly score?: number;
 		readonly isActive?: boolean;
 		readonly isWinner?: boolean;
@@ -135,6 +149,8 @@ export interface ClientToServerEvents {
 	"room:rematch": (accept: boolean, ack: RoomAck<void>) => void;
 	"room:kick": (memberId: string, ack: RoomAck<void>) => void;
 	"room:access": (access: Partial<RoomAccess>, ack: RoomAck<void>) => void;
+	/** 等候时房主改开房选项（目标分、固定局数、战术模式）；fixedRounds 传 null 表示不固定。 */
+	"room:options": (options: Partial<GameOptions>, ack: RoomAck<void>) => void;
 	/** 等待中：观战的人坐到空座位上 / 玩家（房主除外）改成观战。 */
 	"room:sit": (ack: RoomAck<void>) => void;
 	"room:stand": (ack: RoomAck<void>) => void;
