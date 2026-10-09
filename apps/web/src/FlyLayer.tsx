@@ -58,7 +58,7 @@ export default function FlyLayer({ anim, now, rows, frozen, reduced }: FlyLayerP
       const timer = window.setInterval(() => {
         setTick((value) => value + 1);
         count += 1;
-        if (count > 20) window.clearInterval(timer);
+        if (count > 80) window.clearInterval(timer);
       }, 150);
       return () => window.clearInterval(timer);
     }
@@ -156,7 +156,7 @@ export default function FlyLayer({ anim, now, rows, frozen, reduced }: FlyLayerP
         sprites.push({
           key: `pop${step.card}`,
           className: "nt-fly-sprite",
-          style: { ...spriteFrame(ART.headsPop, 6, Math.floor(since / 90), 32, 32, 2), transform: `translate(${Math.round(avatar.left + avatar.width / 2 - 32)}px, ${Math.round(avatar.top - 40)}px)` },
+          style: { ...spriteFrame(ART.headsPop, 6, Math.floor(since / 90), 32, 32, 2), transform: `translate(${Math.max(0, Math.round(avatar.left + avatar.width / 2 - 32))}px, ${Math.max(0, Math.round(avatar.top - 40))}px)` },
         });
         sprites.push({
           key: `plus${step.card}`,
