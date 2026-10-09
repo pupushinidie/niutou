@@ -1,21 +1,23 @@
-import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
-  COLUMNS,
-  type Column,
+  bullheads,
+  legalActions,
+  sumBulls,
+  waitingFor,
   type GameCommand,
   type GameEvent,
   type GameState,
   type LobbyMember,
   type LobbyRoomSnapshot,
-  type Runner,
 } from "@niutou/game";
-import { avatarArt, backdropFor, iconArt, seatOf, summitArt } from "./art.js";
-import DiceTray, { ROLL_MS } from "./DiceTray.js";
 import GameRules from "./GameRules.js";
-import { GameRoomMenu } from "./RoomExtras.js";
-import Mountain, { type BustGhosts, type Fresh } from "./Mountain.js";
+import { GameRoomMenu, SpectateBar } from "./RoomExtras.js";
 import { socket } from "./socket.js";
 
+/**
+ * 调试牌桌（引擎阶段放的）：把状态直接摆出来，每个合法动作一个按钮，方便联调。
+ * 正式牌桌由界面阶段重做；props 和 App.tsx 的接法可以照用。
+ */
 interface GameBoardProps {
   readonly room: LobbyRoomSnapshot;
   readonly busy: boolean;
@@ -50,250 +52,217 @@ function useCountdown(room: LobbyRoomSnapshot): number | null {
   return Math.max(0, Math.ceil((anchor.ms - (now - anchor.at)) / 1000));
 }
 
-const joinColumns = (columns: readonly number[]) => columns.join("、");
+const ROW_NAMES = ["第 1 排", "第 2 排", "第 3 排", "第 4 排"];
 
 function describeEvent(event: GameEvent, name: (id: string) => string): string | null {
   switch (event.type) {
-    case "Rolled":
-      return `${name(event.player)} 掷出 ${event.dice.join(" ")}`;
-    case "Advanced":
-      return event.sums.length === 2 && event.sums[0] === event.sums[1]
-        ? `${name(event.player)} 在 ${event.sums[0]} 号赛道爬 2 格`
-        : `${name(event.player)} 爬 ${joinColumns(event.sums)} 号赛道`;
-    case "Busted":
-      return event.lost.length > 0
-        ? `${name(event.player)} 爆掉了！${joinColumns(event.lost.map((runner) => runner.column))} 号赛道的进度作废`
-        : `${name(event.player)} 爆掉了`;
-    case "Stopped":
-      return `${name(event.player)} 收手，在 ${joinColumns(event.saved.map((entry) => entry.column))} 号赛道扎营`;
-    case "ColumnClaimed":
-      return `${name(event.player)} 登顶 ${event.column} 号赛道！${event.bumped.length > 0 ? `${event.bumped.map(name).join("、")}的营地被撤下` : ""}`;
-    case "TurnTimedOut":
-      return event.stage === "roll" ? `${name(event.player)} 超时，跳过这回合` : `${name(event.player)} 超时，自动收手`;
+    case "Revealed":
+      return `亮牌：${event.plays.map((play) => `${name(play.player)} ${play.card}`).join("，")}`;
+    case "CardPlaced":
+      return `${name(event.player)} 的 ${event.card} 接到${ROW_NAMES[event.row]}（第 ${event.position} 张）`;
+    case "RowTaken":
+      return event.reason === "sixth"
+        ? `${name(event.player)} 的 ${event.card} 是${ROW_NAMES[event.row]}的第六张，收走 ${event.cards.join("、")}，罚 ${event.bulls} 分`
+        : `${name(event.player)} 的 ${event.card} 比所有排尾都小，${event.auto ? "代选" : "选"}收${ROW_NAMES[event.row]} ${event.cards.join("、")}，罚 ${event.bulls} 分`;
+    case "ChooseRow":
+      return `${name(event.player)} 的 ${event.card} 比所有排尾都小，等他选一排收走`;
+    case "RoundEnded":
+      return `第 ${event.round} 局结束`;
+    case "RoundStarted":
+      return `第 ${event.round} 局发牌`;
     case "GameEnded":
-      return `${name(event.winner)} 占领 3 条赛道，获胜！`;
+      return `游戏结束，${event.winners.map(name).join("、")} 罚分最少`;
+    case "TimedOut":
+      return `${event.players.map(name).join("、")} 超时，系统代做`;
     default:
       return null;
   }
 }
 
-type Banner = { readonly key: string; readonly text: string; readonly tone: "bust" | "summit" | "turn" | "win" };
-
-function GameBoard({ room, busy, error, notice, brand, connection, themeToggle, chat, onCommand, onRematch, onAuto, onDissolve, watchId, onLeave }: GameBoardProps) {
-  const game = room.game!;
-  const member = room.members.find((candidate) => candidate.id === socket.id);
-  // 观战的人没有座位：牌桌按 watchId 那位玩家的座位摆（me 就是他），但什么都不能点，也不叫「你」。
-  const spectating = !member;
-  const myId = member?.playerId ?? watchId;
-  const selfId = spectating ? "" : myId;
-  const isHost = member?.isHost ?? false;
-  const current = game.players[game.currentPlayer]!;
-  const myTurn = !spectating && game.phase === "playing" && current.id === myId;
-  const secondsLeft = useCountdown(room);
-  const nameOf = (playerId: string) => (playerId === selfId ? "你" : game.players.find((player) => player.id === playerId)?.name ?? "?");
-  const colorOf = (playerId: string) => game.players.find((player) => player.id === playerId)?.color ?? 0;
-  const memberOf = (playerId: string) => room.members.find((candidate) => candidate.playerId === playerId);
-  // 托管中：人机替我行动，提示条上给一个「取消托管」
-  const autoPlaying = member?.auto === true;
-  // 「对局已开始」这类提示只留到第一步动作
-  const firstVersion = useRef(game.version);
-  const shownNotice = game.version === firstVersion.current ? notice : "";
-
-  const [preview, setPreview] = useState<Runner[] | null>(null);
-  const [rollKey, setRollKey] = useState<string | null>(null);
-  const [bust, setBust] = useState<BustGhosts | null>(null);
-  const [fresh, setFresh] = useState<Fresh | null>(null);
-  const [banner, setBanner] = useState<Banner | null>(null);
-  const [log, setLog] = useState<{ key: string; text: string }[]>([]);
-  const seenVersion = useRef(game.version);
-
-  useEffect(() => {
-    if (game.version === seenVersion.current) return;
-    // 再来一局时版本号从头算：清掉上一局的日志和动画
-    const restarted = game.version < seenVersion.current;
-    seenVersion.current = game.version;
-    if (restarted) {
-      setLog([]);
-      setBust(null);
-      setFresh(null);
-    }
-    const key = String(game.version);
-    const events = game.events;
-    const lines = events
-      .map((event, index) => ({ key: `${key}-${index}`, text: describeEvent(event, nameOf) }))
-      .filter((line): line is { key: string; text: string } => line.text !== null);
-    // 最新的一步排在最上面；同一步里的几条也是后发生的在上（不要在更新函数里原地 reverse，开发模式会调两次）
-    const newestFirst = [...lines].reverse();
-    setLog((previous) => [...newestFirst, ...(restarted ? [] : previous)].slice(0, 60));
-
-    const rolled = events.find((event) => event.type === "Rolled");
-    if (rolled) setRollKey(key);
-    const busted = events.find((event) => event.type === "Busted");
-    const stopped = events.find((event) => event.type === "Stopped");
-    const claims = events.filter((event): event is Extract<GameEvent, { type: "ColumnClaimed" }> => event.type === "ColumnClaimed");
-    const ended = events.find((event) => event.type === "GameEnded");
-    const started = events.find((event) => event.type === "TurnStarted");
-
-    if (busted) {
-      setBust({ key, color: colorOf(busted.player), runners: busted.lost });
-      setBanner({ key, text: `${nameOf(busted.player)} 爆掉了！`, tone: "bust" });
-    } else if (stopped) {
-      setFresh({
-        key,
-        player: stopped.player,
-        camps: stopped.saved.map((entry) => entry.column),
-        summits: claims.map((claim) => claim.column),
-      });
-      if (ended) setBanner({ key, text: `${nameOf(ended.winner)} 登顶 3 座山峰，获胜！`, tone: "win" });
-      else if (claims.length > 0) setBanner({ key, text: `${nameOf(stopped.player)} 登顶 ${joinColumns(claims.map((claim) => claim.column))} 号！`, tone: "summit" });
-    }
-    if (started && started.player === selfId && !autoPlaying && !busted && claims.length === 0) {
-      setBanner({ key, text: "轮到你了", tone: "turn" });
-    }
-  }, [game.version]);
-
-  // 轮到自己而页面在后台时，标签页标题提醒一下
-  useEffect(() => {
-    const base = document.title.replace(/^【轮到你】/, "");
-    const update = () => { document.title = myTurn && document.hidden ? `【轮到你】${base}` : base; };
-    update();
-    document.addEventListener("visibilitychange", update);
-    return () => {
-      document.removeEventListener("visibilitychange", update);
-      document.title = base;
-    };
-  }, [myTurn]);
-
-  // 爆掉的登山者摔完、横幅播完就清掉
-  useEffect(() => {
-    if (!bust) return;
-    const timer = window.setTimeout(() => setBust(null), ROLL_MS + 1800);
-    return () => window.clearTimeout(timer);
-  }, [bust?.key]);
-  useEffect(() => {
-    if (!banner) return;
-    const timer = window.setTimeout(() => setBanner(null), banner.tone === "bust" ? ROLL_MS + 2200 : 2400);
-    return () => window.clearTimeout(timer);
-  }, [banner?.key]);
-
-  let prompt: string;
-  if (game.phase === "finished") prompt = `${nameOf(game.finalResult!.winner)} 获胜`;
-  else if (autoPlaying) prompt = myTurn ? "托管中：人机正在替你走" : "托管中：轮到你时人机替你走";
-  else if (myTurn && game.stage === "roll") prompt = "轮到你了：掷骰子";
-  else if (myTurn && game.stage === "choose") prompt = "选一种走法（鼠标停在选项上可以预览）";
-  else if (myTurn) prompt = "再掷一次，还是收手扎营？";
-  else prompt = `${current.name} 的回合`;
-
-  const seat = seatOf(current.color);
-
+function Card({ card, dim = false }: { card: number; dim?: boolean }) {
+  const bulls = bullheads(card);
   return (
-    <div className="cs-screen" style={{ "--turn": seat.hex } as CSSProperties}>
-      <header className="cs-topbar">
-        {brand}
-        <div className="cs-turn">
-          <span>第 {game.turn} 手</span>
-          {game.phase === "playing" && (
-            <span className={myTurn ? "cs-turn-who mine" : "cs-turn-who"}>
-              <img src={avatarArt(current.color)} alt="" />
-              {myTurn ? "轮到你" : `轮到 ${current.name}`}
-            </span>
-          )}
-          {game.phase === "playing" && secondsLeft !== null && <b className={secondsLeft <= 10 ? "cs-timer low" : "cs-timer"}>{secondsLeft}s</b>}
-        </div>
-        <div className="cs-topbar-right">
-          {themeToggle}
-          <GameRules />
-          <GameRoomMenu room={room} />
-          {/* 欲罢不能的山大家看到的都一样，观战不用换座位，只要一个离开按钮。 */}
-          {spectating && <button className="quiet-button" type="button" onClick={onLeave}>离开观战</button>}
-          {isHost && <button className="quiet-button danger" type="button" onClick={onDissolve}>解散</button>}
-          {connection}
-        </div>
-      </header>
-
-      <div className="cs-layout">
-        <section className="cs-stage" style={{ backgroundImage: `url(${backdropFor(room.code)})` }}>
-          <div className="cs-hud">
-            <div className={myTurn || autoPlaying ? "cs-prompt mine" : "cs-prompt"} role="status">
-              <i className="cs-dot" style={{ background: seat.hex }} />{prompt}
-              {autoPlaying && game.phase === "playing" && (
-                <button className="quiet-button cs-auto-cancel" type="button" onClick={() => onAuto(false)}>取消托管</button>
-              )}
-            </div>
-            {(error || shownNotice) && <p className={error ? "cs-feedback error" : "cs-feedback"} role={error ? "alert" : "status"}>{error || shownNotice}</p>}
-          </div>
-          <Mountain game={game} preview={preview} bust={bust} fresh={fresh} nameOf={nameOf} />
-          {banner && (
-            <div className={`cs-banner ${banner.tone}`} key={banner.key} aria-hidden="true">
-              {banner.tone === "bust" && <img src={iconArt.rockfall} alt="" />}
-              {(banner.tone === "summit" || banner.tone === "win") && <img src={iconArt.trophy} alt="" />}
-              {banner.text}
-            </div>
-          )}
-        </section>
-
-        <aside className="cs-side">
-          <DiceTray game={game} myTurn={myTurn} busy={busy} rollKey={rollKey} onCommand={onCommand} onPreview={setPreview} />
-          <Players game={game} myId={selfId} memberOf={memberOf} />
-          <section className="cs-panel cs-log">
-            <h3>登山日志</h3>
-            {log.length === 0 ? <p className="cs-muted">还没有动作。</p> : <ul>{log.map((line) => <li key={line.key}>{line.text}</li>)}</ul>}
-          </section>
-          <div className="cs-chat">{chat}</div>
-        </aside>
-      </div>
-      {game.phase === "finished" && <FinalDialog game={game} room={room} myId={selfId} spectating={spectating} onRematch={onRematch} onLeave={onLeave} />}
-    </div>
-  );
-}
-
-function ClaimedSlots({ game, playerId }: { game: GameState; playerId: string }) {
-  const claimed = COLUMNS.filter((column) => game.owners[column] === playerId);
-  const color = game.players.find((player) => player.id === playerId)?.color ?? 0;
-  const slots = Math.max(game.config.columnsToWin, claimed.length);
-  return (
-    <span className="cs-slots" aria-label={`已占领 ${claimed.length} 条赛道`}>
-      {Array.from({ length: slots }, (_, index) => {
-        const column: Column | undefined = claimed[index];
-        return column !== undefined ? (
-          <span key={index} className="cs-slot filled" title={`${column} 号赛道`}>
-            <img src={summitArt(color)} alt="" />
-            <b>{column}</b>
-          </span>
-        ) : <span key={index} className="cs-slot" />;
-      })}
+    <span className={`nt-card b${bulls}${dim ? " dim" : ""}`} title={`${card}：${bulls} 个牛头`}>
+      <b>{card}</b>
+      <i>{"♉".repeat(bulls)}</i>
     </span>
   );
 }
 
-function Players({ game, myId, memberOf }: { game: GameState; myId: string; memberOf: (id: string) => LobbyMember | undefined }) {
+function GameBoard({ room, busy, error, notice, brand, connection, themeToggle, chat, onCommand, onRematch, onAuto, onDissolve, watchId, onWatch, onLeave }: GameBoardProps) {
+  const game = room.game!;
+  const member = room.members.find((candidate) => candidate.id === socket.id);
+  const spectating = !member;
+  const myId = member?.playerId ?? watchId;
+  const selfId = spectating ? "" : myId;
+  const isHost = member?.isHost ?? false;
+  const me = game.players.find((player) => player.id === myId)!;
+  const secondsLeft = useCountdown(room);
+  const waiting = waitingFor(game);
+  const actions = spectating ? [] : legalActions(game, myId);
+  const autoPlaying = member?.auto === true;
+  const nameOf = (playerId: string) => (playerId === selfId ? "你" : game.players.find((player) => player.id === playerId)?.name ?? "?");
+  const memberOf = (playerId: string) => room.members.find((candidate) => candidate.playerId === playerId);
+  const firstVersion = useRef(game.version);
+  const shownNotice = game.version === firstVersion.current ? notice : "";
+
+  const [log, setLog] = useState<{ key: string; text: string }[]>([]);
+  const seenVersion = useRef(game.version);
+  useEffect(() => {
+    if (game.version === seenVersion.current) return;
+    const restarted = game.version < seenVersion.current;
+    seenVersion.current = game.version;
+    const lines = game.events
+      .map((event, index) => ({ key: `${game.version}-${index}`, text: describeEvent(event, nameOf) }))
+      .filter((line): line is { key: string; text: string } => line.text !== null);
+    setLog((previous) => [...[...lines].reverse(), ...(restarted ? [] : previous)].slice(0, 80));
+  }, [game.version]);
+
+  let prompt: string;
+  if (game.phase === "gameOver") prompt = "游戏结束";
+  else if (autoPlaying) prompt = "托管中：人机替你出牌";
+  else if (game.phase === "select") prompt = spectating ? "大家在选牌" : me.selected ? "已选好，可以撤回改选；等其他人" : "选一张牌（点一下就确认）";
+  else if (game.phase === "chooseRow") prompt = game.chooser === myId && !spectating ? "你的牌比所有排尾都小：选一排收走" : `${nameOf(game.chooser!)} 正在选排`;
+  else prompt = `第 ${game.round} 局结束，点「继续」或等几秒自动开下一局`;
+
+  const reveal = game.reveal;
   return (
-    <section className="cs-panel cs-players">
-      <h3>登山队 <small>先占领 {game.config.columnsToWin} 条赛道获胜</small></h3>
-      {game.players.map((player, index) => {
-        const active = game.phase === "playing" && game.currentPlayer === index;
-        const camps = COLUMNS.filter((column) => (player.progress[column] ?? 0) > 0 && !game.owners[column]).length;
+    <div className="nt-screen">
+      <header className="nt-topbar">
+        {brand}
+        <div className="nt-status">
+          <span>第 {game.round} 局 · 第 {game.turn} 手 · {game.phase}</span>
+          <span>{game.config.fixedRounds !== null ? `固定 ${game.config.fixedRounds} 局` : `${game.config.target} 分结束`}{game.config.tactics ? " · 战术" : ""}</span>
+          {game.phase !== "gameOver" && secondsLeft !== null && <b className={secondsLeft <= 5 ? "nt-timer low" : "nt-timer"}>{secondsLeft}s</b>}
+        </div>
+        <div className="nt-topbar-right">
+          {themeToggle}
+          <GameRules />
+          <GameRoomMenu room={room} />
+          {isHost && <button className="quiet-button danger" type="button" onClick={onDissolve}>解散</button>}
+          {connection}
+        </div>
+      </header>
+      {spectating && <SpectateBar room={room} watchId={watchId} onWatch={onWatch} onLeave={onLeave} />}
+
+      <div className="nt-layout">
+        <main className="nt-main">
+          <div className="nt-prompt" role="status">
+            {prompt}
+            {autoPlaying && game.phase !== "gameOver" && <button className="quiet-button" type="button" onClick={() => onAuto(false)}>取消托管</button>}
+            {!spectating && !autoPlaying && game.phase !== "gameOver" && <button className="quiet-button" type="button" onClick={() => onAuto(true)}>托管</button>}
+          </div>
+          {(error || shownNotice) && <p className={error ? "nt-feedback error" : "nt-feedback"} role={error ? "alert" : "status"}>{error || shownNotice}</p>}
+
+          <section className="nt-rows" data-tutorial="rows">
+            {game.rows.map((row, index) => {
+              const chooseThis = actions.find((action) => action.type === "chooseRow" && action.row === index);
+              return (
+                <div className={row.length === 5 ? "nt-row full" : "nt-row"} key={index}>
+                  <span className="nt-row-name">{ROW_NAMES[index]}<small>{sumBulls(row)} 牛头</small></span>
+                  <span className="nt-row-cards">
+                    {row.map((card) => <Card key={card} card={card} />)}
+                    {Array.from({ length: 5 - row.length }, (_, slot) => <span key={`e${slot}`} className="nt-slot" />)}
+                    <span className="nt-slot danger" title="第六张收牌">6</span>
+                  </span>
+                  {chooseThis && (
+                    <button className="primary-button" type="button" disabled={busy} onClick={() => onCommand(chooseThis)}>收这一排</button>
+                  )}
+                </div>
+              );
+            })}
+          </section>
+
+          {reveal && (
+            <section className="nt-reveal">
+              <h3>第 {reveal.round} 局第 {reveal.turn} 手亮牌（#{reveal.id}）{reveal.done ? "" : " · 结算中"}</h3>
+              <div className="nt-plays">
+                {reveal.plays.map((play, index) => (
+                  <span key={play.card} className={index < reveal.steps.length ? "nt-play done" : "nt-play"}>
+                    <Card card={play.card} />
+                    <small>{nameOf(play.player)}</small>
+                  </span>
+                ))}
+              </div>
+              <ol>
+                {reveal.steps.map((step) => (
+                  <li key={step.card}>
+                    {nameOf(step.player)} {step.card} → {ROW_NAMES[step.row]}
+                    {step.kind === "place" ? `（第 ${step.position} 张）` : step.kind === "sixth" ? `：第六张，收 ${step.taken.join("、")}，罚 ${step.bulls}` : `：${step.auto ? "代选" : "自选"}收整排 ${step.taken.join("、")}，罚 ${step.bulls}`}
+                  </li>
+                ))}
+              </ol>
+            </section>
+          )}
+
+          <section className="nt-hand" data-tutorial="hand">
+            <h3>{spectating ? `${me.name} 的手牌` : "你的手牌"} <small>{me.handCount} 张</small></h3>
+            <div className="nt-hand-cards">
+              {me.hand.length === 0 && me.handCount > 0 && <span className="nt-muted">（看不到）</span>}
+              {me.hand.map((card) => {
+                const action = actions.find((candidate) => candidate.type === "select" && candidate.card === card);
+                const chosen = me.selection === card;
+                return (
+                  <button
+                    key={card}
+                    type="button"
+                    className={chosen ? "nt-hand-card chosen" : "nt-hand-card"}
+                    disabled={busy || (!action && !chosen)}
+                    onClick={() => (chosen ? onCommand({ type: "unselect" }) : action && onCommand(action))}
+                    title={chosen ? "点一下撤回" : "选这张"}
+                  >
+                    <Card card={card} />
+                  </button>
+                );
+              })}
+            </div>
+            <div className="nt-actions">
+              {actions.some((action) => action.type === "unselect") && (
+                <button className="quiet-button" type="button" disabled={busy} onClick={() => onCommand({ type: "unselect" })}>撤回</button>
+              )}
+              {actions.some((action) => action.type === "nextRound") && (
+                <button className="primary-button" type="button" disabled={busy} onClick={() => onCommand({ type: "nextRound" })}>继续</button>
+              )}
+            </div>
+          </section>
+        </main>
+
+        <aside className="nt-side">
+          <Players game={game} myId={selfId} waiting={waiting} memberOf={memberOf} />
+          <section className="nt-panel nt-log">
+            <h3>记录</h3>
+            {log.length === 0 ? <p className="nt-muted">还没有动作。</p> : <ul>{log.map((line) => <li key={line.key}>{line.text}</li>)}</ul>}
+          </section>
+          <div className="nt-chat">{chat}</div>
+        </aside>
+      </div>
+      {game.phase === "gameOver" && <FinalDialog game={game} room={room} myId={selfId} spectating={spectating} onRematch={onRematch} onLeave={onLeave} />}
+    </div>
+  );
+}
+
+function Players({ game, myId, waiting, memberOf }: { game: GameState; myId: string; waiting: string[]; memberOf: (id: string) => LobbyMember | undefined }) {
+  const live = game.phase === "select" || game.phase === "chooseRow";
+  return (
+    <section className="nt-panel nt-players">
+      <h3>玩家 <small>罚分越少越好</small></h3>
+      {game.players.map((player) => {
         const seated = memberOf(player.id);
         const offline = !seated?.connected;
         return (
-          <div
-            className={["cs-player", active ? "active" : "", offline ? "offline" : ""].join(" ")}
-            key={player.id}
-            style={{ "--seat": seatOf(player.color).hex } as CSSProperties}
-          >
-            <img className="cs-avatar" src={avatarArt(player.color)} alt="" />
-            <div className="cs-player-main">
-              <strong>
-                {player.name}
-                {player.id === myId && <small className="cs-you">你</small>}
-                {seated?.bot && <small className="cs-bot">人机</small>}
-                {/* 离线的人也由人机代打 */}
-                {!seated?.bot && (seated?.auto || offline) && <small className="cs-auto">托管</small>}
-                {offline && <small className="cs-offline">离线</small>}
-              </strong>
-              <span>{active ? (game.stage === "roll" ? "准备掷骰" : `本回合已掷 ${game.rollsThisTurn} 次`) : `营地 ${camps} 处`}</span>
-            </div>
-            <ClaimedSlots game={game} playerId={player.id} />
+          <div className={waiting.includes(player.id) ? "nt-player waiting" : "nt-player"} key={player.id}>
+            <strong>
+              {player.name}
+              {player.id === myId && <small className="nt-tag">你</small>}
+              {seated?.bot && <small className="nt-tag">人机</small>}
+              {!seated?.bot && (seated?.auto || offline) && <small className="nt-tag">托管</small>}
+              {offline && <small className="nt-tag">离线</small>}
+            </strong>
+            <span>
+              {game.phase === "select" ? (player.selected ? "已选好" : "思考中") : game.phase === "roundEnd" ? (player.ready ? "已继续" : "看结算") : game.chooser === player.id ? "选排中" : ""}
+            </span>
+            <span>本局 {player.roundBulls} · 累计 {player.total + (live ? player.roundBulls : 0)}</span>
+            <span className="nt-muted">收了 {player.taken.length} 张 · 手牌 {player.handCount}</span>
           </div>
         );
       })}
@@ -311,31 +280,28 @@ function FinalDialog({ game, room, myId, spectating, onRematch, onLeave }: {
 }) {
   const result = game.finalResult!;
   const accepted = room.rematch?.acceptedIds.includes(socket.id ?? "") ?? false;
-  const rows = [...game.players].sort((a, b) => (b.id === result.winner ? 1 : 0) - (a.id === result.winner ? 1 : 0) || b.score - a.score);
-  const winner = game.players.find((player) => player.id === result.winner)!;
+  const rows = [...game.players].sort((a, b) => a.total - b.total);
+  const winners = result.winners.map((id) => (id === myId ? "你" : game.players.find((player) => player.id === id)!.name));
   return (
     <div className="gm-modal-backdrop" role="presentation">
-      <section className="gm-panel cs-final" role="dialog" aria-modal="true" aria-labelledby="cs-final-title">
-        <img className="cs-final-trophy" src={iconArt.trophy} alt="" />
-        <h2 id="cs-final-title">{winner.id === myId ? "你登顶了！" : `${winner.name} 获胜`}</h2>
-        <ol className="cs-standings">
+      <section className="gm-panel nt-final" role="dialog" aria-modal="true" aria-labelledby="nt-final-title">
+        <h2 id="nt-final-title">{winners.join("、")} {result.winners.length > 1 ? "并列获胜" : "获胜"}</h2>
+        <p className="nt-muted">{result.reason === "rounds" ? `打满 ${result.rounds} 局` : `有人到了 ${game.config.target} 分`}，罚分最少的赢</p>
+        <ol className="nt-standings">
           {rows.map((player) => (
-            <li key={player.id} className={player.id === result.winner ? "winner" : ""} style={{ "--seat": seatOf(player.color).hex } as CSSProperties}>
-              <img className="cs-avatar" src={avatarArt(player.color)} alt="" />
+            <li key={player.id} className={result.winners.includes(player.id) ? "winner" : ""}>
               <strong>{player.name}{player.id === myId ? "（你）" : ""}</strong>
-              <ClaimedSlots game={game} playerId={player.id} />
+              <span>{game.history.map((round) => round.bulls[player.id] ?? 0).join(" + ")} = {player.total}</span>
             </li>
           ))}
         </ol>
         {spectating ? (
-          <div className="cs-rematch">
+          <div className="nt-rematch">
             <span>{room.rematch ? `等玩家决定要不要再来一局（${room.rematch.acceptedIds.length}/${room.members.length} 人同意）` : "对局结束"}</span>
-            <div className="gm-panel-actions">
-              <button className="quiet-button" type="button" onClick={onLeave}>离开观战</button>
-            </div>
+            <div className="gm-panel-actions"><button className="quiet-button" type="button" onClick={onLeave}>离开观战</button></div>
           </div>
         ) : room.rematch && (
-          <div className="cs-rematch">
+          <div className="nt-rematch">
             <span>再来一局？还剩 {Math.ceil(room.rematch.remainingMs / 1000)} 秒（{room.rematch.acceptedIds.length}/{room.members.length} 人同意）</span>
             <div className="gm-panel-actions">
               <button className="quiet-button" type="button" onClick={() => onRematch(false)}>离开</button>

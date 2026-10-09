@@ -66,10 +66,10 @@ function OnlineRooms({ rooms, connected, busy, onJoin }: {
                     <span className="online-room-name">{player.name}</span>
                     {player.bot && <small>人机</small>}
                     {player.isHost && room.status === "waiting" && <small>房主</small>}
-                    {player.isActive && <small className="turn">行动中</small>}
+                    {player.isActive && <small className="turn">思考中</small>}
                     {player.isWinner && <small className="winner">胜者</small>}
                     {!player.connected && <small>离线</small>}
-                    {player.score !== undefined && <b>{player.score}<span> 峰</span></b>}
+                    {player.score !== undefined && <b>{player.score}<span> 罚分</span></b>}
                   </li>
                 ))}
               </ul>

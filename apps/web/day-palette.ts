@@ -1,12 +1,11 @@
 import type { DayPalette } from "./day-theme";
 
 /**
- * 白天版调色表（欲罢不能，雪山夜色的蓝灰）。
+ * 白天版调色表（模板里欲罢不能的蓝灰，谁是牛头王的界面阶段会按西部酒馆的配色重调）。
  * 深色底、面板、按钮 → 白底浅色；深色像素描边保留；浅色字 → 深色字。
- * 雪山场景（背景图、岩柱、登山者）和叠在场景上的提示条、横幅、按钮里的金色红色这些内容色不换。
  */
 export const palette: DayPalette = {
-  files: ["app-pixel.css", "cantstop.css"],
+  files: ["app-pixel.css", "niutou.css"],
   colors: {
     "#0c1120": "#ffffff", // 底色、输入框
     "#101729": "#f8f9fc", // 底色的棋盘纹
@@ -43,6 +42,6 @@ export const palette: DayPalette = {
     "--ok": "#1f8a45",
     "--bad": "#d1303f",
   },
-  // 雪山场景和叠在上面的提示条、横幅保持夜间的样子（字色由 theme-day.css 换回浅色）
-  keep: [".cs-stage", ".cs-ground", ".cs-prompt", ".cs-feedback", ".cs-banner"],
+  // 牌面保持原来的底色（调试牌桌的 .nt-card；正式牌桌由界面阶段补）
+  keep: [".nt-card"],
 };

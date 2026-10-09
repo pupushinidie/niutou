@@ -1,0 +1,55 @@
+/*
+ * 调试牌桌的样式（引擎阶段放的，界面阶段会整个重做）。
+ * 只用 app-pixel.css 里的变量；牌面按牛头数分 5 种底色（规则书 9.5）。
+ */
+.app-shell.nt-game { max-width: none; }
+.nt-screen { display: flex; flex-direction: column; gap: 12px; min-height: 100vh; padding: 12px 16px; box-sizing: border-box; }
+.nt-topbar { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; justify-content: space-between; }
+.nt-status { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; color: var(--muted); font-size: 14px; }
+.nt-topbar-right { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.nt-timer { color: var(--gold); font-size: 24px; }
+.nt-timer.low { color: var(--bad); }
+.nt-layout { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 12px; }
+@media (max-width: 900px) { .nt-layout { grid-template-columns: 1fr; } }
+.nt-main, .nt-side { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.nt-prompt { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; color: var(--gold); font-size: 24px; }
+.nt-feedback { color: var(--ok); margin: 0; }
+.nt-feedback.error { color: var(--bad); }
+.nt-panel, .nt-rows, .nt-reveal, .nt-hand { background: var(--panel); border: var(--px) solid var(--edge); padding: 10px; }
+.nt-panel h3, .nt-reveal h3, .nt-hand h3 { margin: 0 0 8px; font-size: 16px; color: var(--text); }
+.nt-panel h3 small, .nt-hand h3 small { color: var(--muted); font-size: 12px; margin-left: 8px; }
+.nt-muted { color: var(--muted); font-size: 12px; }
+.nt-rows { display: flex; flex-direction: column; gap: 6px; }
+.nt-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.nt-row.full .nt-row-name { color: var(--bad); }
+.nt-row-name { display: flex; flex-direction: column; width: 72px; color: var(--text); font-size: 14px; }
+.nt-row-name small { color: var(--muted); font-size: 12px; }
+.nt-row-cards { display: flex; gap: 4px; flex-wrap: wrap; }
+.nt-slot { width: 44px; height: 56px; border: var(--px) dashed var(--panel-2); box-sizing: border-box; }
+.nt-slot.danger { border-color: var(--bad); color: var(--bad); display: grid; place-items: center; font-size: 12px; }
+.nt-card { display: inline-flex; flex-direction: column; align-items: center; justify-content: center; width: 44px; height: 56px; box-sizing: border-box; border: var(--px) solid var(--edge); color: #1a1208; background: #f2e6c8; }
+.nt-card b { font-size: 20px; line-height: 1; }
+.nt-card i { font-style: normal; font-size: 12px; line-height: 1; color: #6e1020; word-break: break-all; text-align: center; }
+.nt-card.b2 { background: #9fd3f2; }
+.nt-card.b3 { background: #f2d27a; }
+.nt-card.b5 { background: #f29a6e; }
+.nt-card.b7 { background: #d36ef2; }
+.nt-card.dim { opacity: 0.4; }
+.nt-plays { display: flex; flex-wrap: wrap; gap: 8px; }
+.nt-play { display: flex; flex-direction: column; align-items: center; gap: 2px; font-size: 12px; color: var(--muted); }
+.nt-play.done { opacity: 0.55; }
+.nt-reveal ol { margin: 8px 0 0; padding-left: 20px; color: var(--text); font-size: 13px; }
+.nt-hand-cards { display: flex; flex-wrap: wrap; gap: 6px; }
+.nt-hand-card { padding: 0; border: var(--px) solid transparent; background: none; cursor: pointer; }
+.nt-hand-card.chosen { border-color: var(--gold); transform: translateY(-6px); }
+.nt-hand-card:disabled { cursor: default; }
+.nt-actions { display: flex; gap: 8px; margin-top: 8px; }
+.nt-player { display: grid; grid-template-columns: 1fr auto; gap: 2px 8px; padding: 6px 0; border-bottom: var(--px) solid var(--panel-2); color: var(--text); font-size: 13px; }
+.nt-player.waiting strong { color: var(--gold); }
+.nt-tag { margin-left: 6px; color: var(--muted); font-size: 12px; }
+.nt-log ul { margin: 0; padding-left: 16px; max-height: 240px; overflow-y: auto; color: var(--text); font-size: 12px; }
+.nt-final { max-width: 520px; }
+.nt-standings { padding-left: 20px; }
+.nt-standings li { display: flex; justify-content: space-between; gap: 12px; color: var(--text); }
+.nt-standings li.winner { color: var(--gold); }
+.nt-rematch { display: flex; flex-direction: column; gap: 8px; color: var(--muted); }

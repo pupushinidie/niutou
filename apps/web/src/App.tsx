@@ -1,6 +1,14 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
-import { CAPACITY_OPTIONS, type Capacity, type GameCommand, type LobbyRoomSnapshot, type PublicRoomSummary } from "@niutou/game";
-import { climberArt, dieArt, sceneArt, SEATS } from "./art.js";
+import {
+  CAPACITY_OPTIONS,
+  DEFAULT_OPTIONS,
+  OPTION_LIMITS,
+  type Capacity,
+  type GameCommand,
+  type GameOptions,
+  type LobbyRoomSnapshot,
+  type PublicRoomSummary,
+} from "@niutou/game";
 import { useConfirm } from "./confirm.js";
 import GameBoard from "./GameBoard.js";
 import GameRules from "./GameRules.js";
@@ -25,7 +33,8 @@ function normalizeRoomCode(value: string): string {
 function App() {
   const [mode, setMode] = useState<EntryMode>("create");
   const [name, setName] = useState("");
-  const [capacity, setCapacity] = useState<Capacity>(2);
+  const [capacity, setCapacity] = useState<Capacity>(4);
+  const [options, setOptions] = useState<GameOptions>(DEFAULT_OPTIONS);
   const [confirmAction, confirmDialog] = useConfirm();
   // 白天 / 夜间画面：首页、等候房间、牌桌共用，顶栏按钮随时切换；和游戏中心、其他游戏共用同一个选择。
   const [theme, toggleTheme] = useTheme();
@@ -134,7 +143,7 @@ function App() {
     };
 
     if (mode === "create") {
-      socket.emit("room:create", { name: nickname, capacity }, complete);
+      socket.emit("room:create", { name: nickname, capacity, options }, complete);
     } else {
       socket.emit("room:join", { name: nickname, code: roomCode }, complete);
     }
@@ -217,7 +226,7 @@ function App() {
     const players = room.game.players;
     const watched = players.some((player) => player.id === watchId) ? watchId : players[0]!.id;
     return (
-      <main className="app-shell cs-game">
+      <main className="app-shell nt-game">
         <GameBoard
           room={room}
           busy={busy}
@@ -264,7 +273,7 @@ function App() {
           onDissolve={dissolveRoom}
         />
         <RoomChat room={room} voice={voice} />
-        <footer className="page-footer">再掷一次，还是就此扎营？</footer>
+        <footer className="page-footer">别当第六张。</footer>
         {confirmDialog}
       </main>
     );
@@ -283,18 +292,13 @@ function App() {
 
       <section className="welcome-grid">
         <div className="welcome-copy">
-          <div className="eyebrow"><span className="eyebrow-line" /> 在线对战 · 2–4 人 · 测试版</div>
-          <h1>欲罢不能</h1>
+          <div className="eyebrow"><span className="eyebrow-line" /> 在线对战 · 2–10 人 · 测试版</div>
+          <h1>谁是牛头王</h1>
           <p className="welcome-description">
-            掷 4 颗骰子，两两分组，带着 3 个登山者往 2–12 号登山路上爬。
-            每爬一步都要选：再掷一次继续冒险，还是收手扎营保住进度？贪心爆掉，这回合就白爬了。
-            先登顶 3 条路的人获胜。创建一间私人房间，或输入房间码加入朋友的对局；人不够可以加人机。
+            每人 10 张数字牌，大家同时扣一张，亮牌后从小到大接到桌上 4 排里。
+            谁的牌成了一排的第六张，就得把前 5 张收走；牌比所有排尾都小，就自己挑一排收走。
+            收到的牛头都是罚分，有人到 66 分时结束，罚分最少的人赢。创建一间私人房间，或输入房间码加入朋友的对局；人不够可以加人机。
           </p>
-          <img className="cs-hero" src={sceneArt.hero} alt="" />
-          <div className="cs-showcase" aria-hidden="true">
-            {SEATS.map((seat, index) => <img key={seat.key} src={climberArt(index)} alt="" />)}
-            {[3, 4, 5, 6].map((face) => <img key={face} className="cs-showcase-die" src={dieArt(face)} alt="" />)}
-          </div>
         </div>
 
         <section className="entry-card" aria-labelledby="entry-title">
@@ -359,6 +363,8 @@ function App() {
                   ))}
                 </div>
                 <p className="field-hint">至少 2 位玩家后，房主即可开始；空座位可以加人机。</p>
+                <label className="field-label field-label-spaced">开房选项</label>
+                <OptionsEditor options={options} editable onChange={(patch) => setOptions({ ...options, ...patch })} />
               </>
             ) : (
               <>
@@ -397,16 +403,16 @@ function App() {
         <div className="how-item"><span className="how-number">03</span><span>开始对局</span></div>
       </section>
       <OnlineRooms rooms={lobbyRooms} connected={connected} busy={busy} onJoin={joinListed} />
-      <footer className="page-footer">再掷一次，还是就此扎营？</footer>
+      <footer className="page-footer">别当第六张。</footer>
     </main>
   );
 }
 
 function Brand() {
   return (
-    <a className="brand" href={import.meta.env.BASE_URL} aria-label="欲罢不能首页">
+    <a className="brand" href={import.meta.env.BASE_URL} aria-label="谁是牛头王首页">
       <span className="brand-mark" aria-hidden="true"><i /><i /><i /></span>
-      <span className="brand-name">欲罢不能<span> CAN'T STOP</span></span>
+      <span className="brand-name">谁是牛头王</span>
     </a>
   );
 }
@@ -506,7 +512,13 @@ function RoomView({
                 </div>
               ))}
             </div>
-            <p className="field-hint">每一步限时 45 秒：没掷骰就超时跳过这回合，掷了骰子后超时自动收手。</p>
+            <p className="field-hint">选牌限时 30 秒、挑排限时 20 秒（从上一手动画放完算起）；超时由系统替你出，连续 2 次转托管。</p>
+            <div className="panel-label">开房选项 <span>{isHost ? "开局前房主可以改" : "只有房主能改"}</span></div>
+            <OptionsEditor
+              options={room.options}
+              editable={isHost}
+              onChange={(patch) => socket.emit("room:options", patch, () => {})}
+            />
             <RoomSettingsPanel room={room} />
             <SeatSwitch room={room} />
             <div className="room-actions">
@@ -527,6 +539,58 @@ function RoomView({
       {notice && <p className="feedback feedback-success room-feedback" role="status">{notice}</p>}
       <div className="room-secure-note"><span>◇</span> {room.access.open ? "公开房间：首页列表里的人可以直接加入空座位。" : "邀请制：要有房间码才能加入；首页列表不显示房间码。"}</div>
     </section>
+  );
+}
+
+/** 开房选项：目标分、固定局数、战术模式（开工拍板：三个都做，默认关）。 */
+function OptionsEditor({ options, editable, onChange }: {
+  options: GameOptions;
+  editable: boolean;
+  onChange: (patch: Partial<GameOptions>) => void;
+}) {
+  const clampTarget = (value: number) => Math.min(OPTION_LIMITS.target.max, Math.max(OPTION_LIMITS.target.min, Math.round(value)));
+  const clampRounds = (value: number) => Math.min(OPTION_LIMITS.fixedRounds.max, Math.max(OPTION_LIMITS.fixedRounds.min, Math.round(value)));
+  return (
+    <div className="room-settings-options nt-options">
+      <label className="field-hint">
+        目标分{" "}
+        <input
+          type="number"
+          className="text-input"
+          style={{ width: 80 }}
+          min={OPTION_LIMITS.target.min}
+          max={OPTION_LIMITS.target.max}
+          value={options.target}
+          disabled={!editable || options.fixedRounds !== null}
+          onChange={(event) => onChange({ target: clampTarget(Number(event.target.value) || OPTION_LIMITS.target.default) })}
+        />
+      </label>
+      <label className="field-hint">
+        <input
+          type="checkbox"
+          checked={options.fixedRounds !== null}
+          disabled={!editable}
+          onChange={(event) => onChange({ fixedRounds: event.target.checked ? 3 : null })}
+        />{" "}
+        固定局数
+        {options.fixedRounds !== null && (
+          <input
+            type="number"
+            className="text-input"
+            style={{ width: 64, marginLeft: 6 }}
+            min={OPTION_LIMITS.fixedRounds.min}
+            max={OPTION_LIMITS.fixedRounds.max}
+            value={options.fixedRounds}
+            disabled={!editable}
+            onChange={(event) => onChange({ fixedRounds: clampRounds(Number(event.target.value) || 1) })}
+          />
+        )}
+      </label>
+      <label className="field-hint">
+        <input type="checkbox" checked={options.tactics} disabled={!editable} onChange={(event) => onChange({ tactics: event.target.checked })} />{" "}
+        战术模式（只用 1 到 人数×10+4）
+      </label>
+    </div>
   );
 }
 
