@@ -176,7 +176,8 @@ export interface GameState {
   version: number;
   /** 以下只在服务端：本局没发出去的牌（顺序是洗过的）、种子、随机数状态、动作序列。 */
   deck?: number[];
-  seed?: number;
-  rngState?: number;
+  /** 服务器：256 位十六进制密钥（ChaCha20，见 rng.ts）；测试、教程、预览：32 位数字（mulberry32）。 */
+  seed?: number | string;
+  rngState?: number | string;
   log?: LogEntry[];
 }

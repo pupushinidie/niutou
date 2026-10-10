@@ -744,7 +744,7 @@ function GameBoard(props: GameBoardProps) {
     <span className="nt-round" data-tutorial="round">
       <b>第 {game.round} 局</b>
       <b>第 {Math.min(game.turn, 10)} 手</b>
-      <small>{game.config.fixedRounds !== null ? `共 ${game.config.fixedRounds} 局` : `${game.config.target} 分结束`}{game.config.tactics ? " · 战术" : ""}</small>
+      <small>{game.config.fixedRounds !== null ? `共 ${game.config.fixedRounds} 局` : `${game.config.target} 分结束`}{game.config.tactics ? " · 战术" : ""}{room.access.allowSpectators && room.access.spectatorsSeeAll ? " · 观战看手牌" : ""}</small>
     </span>
   );
 

@@ -9,7 +9,7 @@ import {
   takeLowRow,
   type ResolveStep,
 } from "./cards.js";
-import { createRng, type Rng } from "./rng.js";
+import { restoreRng, rngFromSeed, type Rng } from "./rng.js";
 import { OPTION_LIMITS } from "./roomTypes.js";
 import type {
   Config,
@@ -350,7 +350,7 @@ export function apply(state: GameState, playerId: string, command: GameCommand, 
 }
 
 function runCommand(state: GameState, playerId: string, command: GameCommand, auto = false): { state: GameState; events: GameEvent[] } {
-  const rng = createRng(state.rngState ?? state.seed ?? 0);
+  const rng = state.rngState !== undefined ? restoreRng(state.rngState) : rngFromSeed(state.seed ?? 0);
   const { state: next, events } = applyInternal(state, playerId, command, rng, auto);
   next.rngState = rng.state;
   const clean = withoutStep(normalizeCommand(command));
@@ -478,18 +478,35 @@ export function redactGameForViewer(state: GameState, viewerId: string): GameSta
   return view;
 }
 
-/** 观战的人：房主打开「观战看手牌」时看得到所有人的手牌和已选的牌；牌堆顺序和种子永远看不到。 */
+/**
+ * 观战的人：房主打开「观战看手牌」时看得到所有人的手牌，但**看不到扣下还没亮的牌**（只留「已选好」）——
+ * 手牌里那张还在，所以从手牌也推不出扣的是哪张（首发验收 I8：观战窗口报牌）。牌堆顺序和种子永远看不到。
+ */
 export function redactGameForSpectator(state: GameState, seeAll: boolean): GameState {
-  return seeAll ? stripServerOnly(state) : redactGameForViewer(state, "");
+  if (!seeAll) return redactGameForViewer(state, "");
+  const view = stripServerOnly(state);
+  view.players = view.players.map((player) => ({ ...player, selection: null }));
+  return view;
+}
+
+/** 不给种子时：有 Web Crypto（Node 18+、浏览器）就生成 256 位十六进制密钥，否则退回 32 位数字。 */
+function randomSeed(): number | string {
+  const crypto = (globalThis as { crypto?: { getRandomValues?: (array: Uint8Array) => Uint8Array } }).crypto;
+  if (crypto?.getRandomValues) {
+    const bytes = crypto.getRandomValues(new Uint8Array(32));
+    return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+  }
+  return Math.floor(Math.random() * 2 ** 32);
 }
 
 /**
- * 开一场新对局（第 1 局已发好牌，进入选牌）。seed 决定整场所有洗牌；options 是开房选项；
- * overrides 改计时之类的配置（测试用）。
+ * 开一场新对局（第 1 局已发好牌，进入选牌）。seed 决定整场所有洗牌：
+ * **服务器必须给 128–256 位的十六进制串**（ChaCha20，玩家推不出来）；数字种子（mulberry32，32 位，能被穷举）只给测试、教程、预览用。
+ * options 是开房选项；overrides 改计时之类的配置（测试用）。
  */
 export function createGame(
   players: readonly NewPlayer[],
-  seed = Math.floor(Math.random() * 2 ** 32),
+  seed: number | string = randomSeed(),
   options: Partial<GameOptions> = {},
   overrides: Partial<Config> = {},
 ): GameState {
@@ -528,7 +545,7 @@ export function createGame(
     seed,
     log: [],
   };
-  const rng = createRng(seed);
+  const rng = rngFromSeed(seed);
   const events: GameEvent[] = [];
   deal(state, rng, events);
   state.events = events;

@@ -78,9 +78,10 @@ function checkSpectator(state: GameState): void {
   expect(blind.players.every((player) => player.hand.length === 0 && player.selection === null)).toBe(true);
   const blindVisible = visibleCards(blind, null);
   for (const player of state.players) for (const card of player.hand) expect(blindVisible.has(card)).toBe(false);
-  // 上帝视角：所有人的手牌和已选的牌都看得到，牌堆照样看不到
+  // 上帝视角：所有人的手牌看得到，扣下还没亮的牌看不到（只留「已选好」，I8），牌堆照样看不到
   expect(god.players.map((player) => player.hand)).toEqual(state.players.map((player) => player.hand));
-  expect(god.players.map((player) => player.selection)).toEqual(state.players.map((player) => player.selection));
+  expect(god.players.every((player) => player.selection === null)).toBe(true);
+  expect(god.players.map((player) => player.selected)).toEqual(state.players.map((player) => player.selected));
   const godVisible = visibleCards(god, null);
   for (const card of state.deck ?? []) expect(godVisible.has(card)).toBe(false);
 }

@@ -37,7 +37,7 @@ export {
 } from "./scenes.js";
 export type { ExactSpec, PlayerSpec, RevealFrame, SceneName, SceneOptions, SceneRoomOptions } from "./scenes.js";
 export { stateProblems } from "./validate.js";
-export { createRng } from "./rng.js";
+export { chachaBlock, createRng, createSecureRng, restoreRng, rngFromSeed } from "./rng.js";
 export type { Rng } from "./rng.js";
 export { CAPACITY_OPTIONS, DEFAULT_ROOM_ACCESS, OPTION_LIMITS } from "./roomTypes.js";
 export type {

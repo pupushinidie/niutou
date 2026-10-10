@@ -43,6 +43,53 @@ function inject(code: string, names: string[], spec: Omit<Parameters<typeof buil
 }
 
 describe("服务器全流程", () => {
+  it("昵称（I10）：零宽 / 方向控制字符去掉后同名就拒绝；「咕噜X号」留给人机", async () => {
+    const room = await threeSeats();
+    const late = await h.connect();
+    // 满座了，换一个 4 人房测同名
+    const host = await h.connect();
+    const hostName = nick("张三");
+    const created = await ok(call<LobbyRoomSnapshot>((ack) => host.emit("room:create", { name: hostName, capacity: 4 } as never, ack)));
+    const twin = await join(late, { name: `${hostName}\u200b`, code: created.code });
+    expect(twin.ok).toBe(false);
+    const rlo = await join(late, { name: `\u202e${hostName}`, code: created.code });
+    expect(rlo.ok).toBe(false);
+    const fake = await join(late, { name: "咕噜一号", code: created.code });
+    expect(fake.ok).toBe(false);
+    expect((await join(late, { name: nick("李四"), code: created.code })).ok).toBe(true);
+    expect(room.code).toBeTruthy();
+  });
+
+  it("猜房间码限速（I9）：同一条连接 10 秒内第 11 次加入起被拒", async () => {
+    const guesser = await h.connect();
+    const replies: string[] = [];
+    for (let attempt = 0; attempt < 12; attempt += 1) {
+      const reply = await join(guesser, { name: nick("路人"), code: "ZZZZZ2" });
+      replies.push(reply.ok ? "ok" : reply.error);
+    }
+    expect(replies.slice(0, 10).every((reply) => reply.includes("找不到"))).toBe(true);
+    expect(replies.slice(10).every((reply) => reply.includes("频繁"))).toBe(true);
+  });
+
+  it("发牌密钥（I7）：每场 256 位、两场不一样；发给每个人的数据里都没有密钥和随机数状态", async () => {
+    const one = await threeSeats();
+    const two = await threeSeats();
+    for (const room of [one, two]) {
+      await ok(call<LobbyRoomSnapshot>((ack) => room.host.emit("room:start", ack)));
+      for (const client of [room.host, room.a, room.b]) await updateWhere(h, client, (snapshot) => snapshot.game !== undefined);
+    }
+    const first = h.server.testHooks.rngOf(one.code);
+    const second = h.server.testHooks.rngOf(two.code);
+    expect(first.seed).toMatch(/^[0-9a-f]{64}$/);
+    expect(String(first.rngState)).toMatch(/^c20:[0-9a-f]{64}:\d+$/);
+    expect(second.seed).not.toBe(first.seed);
+    for (const client of [one.host, one.a, one.b]) {
+      const text = JSON.stringify(h.latest.get(client));
+      expect(text).not.toContain(String(first.seed));
+      expect(text).not.toContain("c20:");
+    }
+  });
+
   it("建房带开房选项；只有房主能在等候时改；不合法的拒绝", async () => {
     const host = await h.connect();
     const bad = await call<LobbyRoomSnapshot>((ack) => host.emit("room:create", { name: nick("房主"), capacity: 4, options: { target: 3 } } as never, ack));

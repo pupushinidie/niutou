@@ -1,4 +1,4 @@
-import { createHash, createHmac, randomInt, randomUUID, timingSafeEqual } from "node:crypto";
+import { createHash, createHmac, randomBytes, randomInt, randomUUID, timingSafeEqual } from "node:crypto";
 import { appendFile, mkdir } from "node:fs/promises";
 import { createServer } from "node:http";
 import { dirname, resolve } from "node:path";
@@ -73,6 +73,8 @@ interface RoomState {
   botTimers: Map<string, { timer: ReturnType<typeof setTimeout>; key: string }>;
   /** 每位真人连续超时的次数（座位 id → 次数）；自己动一下就清零，到 AUTO_AFTER_TIMEOUTS 次转托管。 */
   timeouts: Map<string, number>;
+  /** 座位 id → 坐这个座位的那次登录（X-GC-Session）。同一次登录不能在同一桌既坐着又观战（首发验收 I8）。没有网关时为空。 */
+  seatSessions: Map<string, string>;
 }
 
 const ROOM_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -163,15 +165,23 @@ export const io = new Server<ClientToServerEvents, ServerToClientEvents>(httpSer
   },
 });
 
+/**
+ * 看不见、或者会改变文字方向的字符：软连字符、零宽空格 / 连接符、方向标记和覆盖（LRO/RLO 等）、隔离符、BOM、
+ * 变体选择符、韩文填充符等。昵称和聊天里一律去掉（首发验收 I10：能用它们做出看起来一样的名字、倒着显示的字）。
+ */
+const INVISIBLE_CHARS = /[\u00ad\u034f\u061c\u115f\u1160\u17b4\u17b5\u180b-\u180f\u200b-\u200f\u202a-\u202e\u2060-\u206f\u3164\ufe00-\ufe0f\ufeff\uffa0]/g;
+/** 人机的名字（咕噜一号…九号这一类）留给人机，真人不能用。 */
+const BOT_NAME_PATTERN = /^咕噜.{1,3}号$/;
+
 function normalizeChatMessage(value: unknown): string | null {
   if (typeof value !== "string") return null;
-  const message = value.replace(/[\u0000-\u001f\u007f]/g, " ").trim().replace(/\s+/g, " ");
+  const message = value.replace(INVISIBLE_CHARS, "").replace(/[\u0000-\u001f\u007f-\u009f]/g, " ").trim().replace(/\s+/g, " ");
   return message.length >= 1 && message.length <= ROOM_CHAT_MAX_LENGTH ? message : null;
 }
 
 function normalizeName(value: unknown): string | null {
   if (typeof value !== "string") return null;
-  const name = value.replace(/[\u0000-\u001f\u007f]/g, "").trim().replace(/\s+/g, " ");
+  const name = value.normalize("NFC").replace(INVISIBLE_CHARS, "").replace(/[\u0000-\u001f\u007f-\u009f]/g, "").trim().replace(/\s+/g, " ");
   return name.length >= 2 && name.length <= 18 ? name : null;
 }
 
@@ -575,8 +585,12 @@ function afterGameChange(room: RoomState): void {
   updateTurnTimer(room);
 }
 
-/** 种子用服务端的安全随机数生成；所有洗牌都在服务端。新的一场托管和超时次数都清零。 */
-function newGame(room: RoomState, seed = randomInt(2 ** 32 - 1)): GameState {
+/**
+ * 种子是服务端 crypto 生成的 256 位密钥，引擎用 ChaCha20 洗牌（见 packages/game/src/rng.ts）。
+ * 以前是 32 位种子 + mulberry32，玩家看自己的 10 张牌和 4 个排头就能穷举出种子、算出所有人的手牌（首发验收 I7）。
+ * 种子只在服务端（不下发），对局结束写进 logs/games.jsonl 方便复盘。新的一场托管和超时次数都清零。
+ */
+function newGame(room: RoomState, seed: number | string = randomBytes(32).toString("hex")): GameState {
   for (const member of room.members) setAuto(room, member.playerId, false);
   room.timeouts.clear();
   clearGameTimers(room);
@@ -621,19 +635,58 @@ const adminTokenHash = process.env.ADMIN_TOKEN
   ? createHash("sha256").update(process.env.ADMIN_TOKEN).digest()
   : null;
 
-function checkAdminToken(socketId: string, token: unknown): string | null {
+/**
+ * 管理员口令。口令错了以后，这条连接**和这个来源 IP** 都要等 2 秒才能再试（只按连接记的话，换一条连接就绕过了，首发验收 I9）。
+ * 大厅从本机直连（127.0.0.1，没有转发头），外面的连接经 Caddy 带着 X-Forwarded-For，所以外面猜口令不会拖累大厅的挤登录。
+ */
+function checkAdminToken(socketId: string, ip: string, token: unknown): string | null {
   if (!adminTokenHash) return "管理功能未启用。";
   const now = Date.now();
-  if (now - (adminFailureTimes.get(socketId) ?? 0) < ADMIN_RETRY_DELAY_MS) {
+  // 本机直连（大厅、测试）不按 IP 记：外面的连接都经 Caddy、带 X-Forwarded-For，冒充不了本机
+  const ipKey = isLoopback(ip) ? null : `ip:${ip}`;
+  if (now - (adminFailureTimes.get(socketId) ?? 0) < ADMIN_RETRY_DELAY_MS || (ipKey !== null && now - (adminFailureTimes.get(ipKey) ?? 0) < ADMIN_RETRY_DELAY_MS)) {
     return "尝试太频繁了，请稍后再试。";
   }
   const tokenHash = createHash("sha256").update(typeof token === "string" ? token : "").digest();
   if (!timingSafeEqual(tokenHash, adminTokenHash)) {
     adminFailureTimes.set(socketId, now);
+    if (ipKey !== null) adminFailureTimes.set(ipKey, now);
     return "管理员口令不正确。";
   }
   return null;
 }
+
+function isLoopback(ip: string): boolean {
+  return /^(::1|127\.|::ffff:127\.)/.test(ip);
+}
+
+/** 来源 IP：经 Caddy 时取 X-Forwarded-For 的最后一个（Caddy 追加的那个，客户端伪造不了），直连时取连接地址。 */
+function clientIp(socket: { handshake: { headers: Record<string, string | string[] | undefined>; address: string } }): string {
+  const forwarded = socket.handshake.headers["x-forwarded-for"];
+  const value = Array.isArray(forwarded) ? forwarded.at(-1) : forwarded;
+  const last = value?.split(",").at(-1)?.trim();
+  return last || socket.handshake.address;
+}
+
+/** 简单的固定窗口限速：key 在 windowMs 里第 max+1 次起返回 true。 */
+const rateWindows = new Map<string, { start: number; count: number }>();
+function overLimit(key: string, max: number, windowMs: number): boolean {
+  const now = Date.now();
+  const entry = rateWindows.get(key);
+  if (!entry || now - entry.start >= windowMs) {
+    rateWindows.set(key, { start: now, count: 1 });
+    return false;
+  }
+  entry.count += 1;
+  return entry.count > max;
+}
+/** 定期清掉过期的限速记录和口令冷却记录（按 IP 记的不会随连接断开清掉）。 */
+const rateSweeper = setInterval(() => {
+  const now = Date.now();
+  for (const [key, entry] of rateWindows) if (now - entry.start > 60_000) rateWindows.delete(key);
+  for (const [key, at] of adminFailureTimes) if (now - at > 60_000) adminFailureTimes.delete(key);
+}, 60_000);
+rateSweeper.unref();
 
 /**
  * 语音用的 STUN/TURN 配置。配置了 TURN_HOST 和 TURN_SECRET 时，按 coturn 的
@@ -673,7 +726,10 @@ function reassignMember(room: RoomState, previousId: string, nextId: string): vo
 }
 
 function invalidNameMessage(payload: CreateRoomPayload | JoinRoomPayload): string | null {
-  return normalizeName(payload?.name) ? null : "昵称长度需为 2–18 个字符。";
+  const name = normalizeName(payload?.name);
+  if (!name) return "昵称长度需为 2–18 个字符。";
+  if (BOT_NAME_PATTERN.test(name.replace(/\s/g, ""))) return "「咕噜X号」是人机的名字，换一个昵称吧。";
+  return null;
 }
 
 /**
@@ -681,6 +737,25 @@ function invalidNameMessage(payload: CreateRoomPayload | JoinRoomPayload): strin
  * X-GC-Session 请求头里；游戏中心挤掉某次登录时发 admin:kick-session，这里断开它的所有连接。
  */
 const socketsBySession = new Map<string, Set<string>>();
+/** 每条连接属于哪次登录（X-GC-Session）；没有网关时（本地开发、qa-env）没有这个头。 */
+const sessionOfSocket = new Map<string, string>();
+
+/** 记下这个座位是哪次登录坐的（断线后座位还在，登录也还算它的）。 */
+function rememberSeat(room: RoomState, playerId: string, socketId: string): void {
+  const session = sessionOfSocket.get(socketId);
+  if (session) room.seatSessions.set(playerId, session);
+  else room.seatSessions.delete(playerId);
+}
+
+/** 这次登录在这一桌有没有座位（含离线的座位）；except 是不算在内的座位。 */
+function seatedLogin(room: RoomState, session: string, exceptPlayerId = ""): boolean {
+  return room.members.some((member) => !member.bot && member.playerId !== exceptPlayerId && room.seatSessions.get(member.playerId) === session);
+}
+
+/** 这次登录在这一桌有没有别的观战窗口。 */
+function spectatingLogin(room: RoomState, session: string, exceptSocketId: string): boolean {
+  return room.spectators.some((spectator) => spectator.id !== exceptSocketId && sessionOfSocket.get(spectator.id) === session);
+}
 
 /**
  * 每个事件除了回执以外有几个参数。客户端漏发回执、或者多发 / 少发参数时，按这个整理好再交给处理函数：
@@ -724,21 +799,35 @@ io.on("connection", (socket) => {
     next();
   });
   const loginSession = socket.handshake.headers["x-gc-session"];
+  const ip = clientIp(socket);
   if (typeof loginSession === "string" && loginSession) {
     const sockets = socketsBySession.get(loginSession) ?? new Set<string>();
     sockets.add(socket.id);
     socketsBySession.set(loginSession, sockets);
+    sessionOfSocket.set(socket.id, loginSession);
     socket.on("disconnect", () => {
       sockets.delete(socket.id);
+      sessionOfSocket.delete(socket.id);
       if (sockets.size === 0 && socketsBySession.get(loginSession) === sockets) socketsBySession.delete(loginSession);
     });
   }
+  const login = typeof loginSession === "string" && loginSession ? loginSession : null;
+  /** 加入、建房：每条连接 10 秒 10 次、每个 IP 10 秒 40 次（猜房间码，首发验收 I9）。 */
+  // 本机直连（大厅、测试、陪玩脚本，没有转发头）不按 IP 限；线上外面的连接都经 Caddy、带 X-Forwarded-For。
+  const loopback = isLoopback(ip);
+  const joinTooFast = () => overLimit(`join:${socket.id}`, 10, 10_000) || (!loopback && overLimit(`join-ip:${ip}`, 40, 10_000));
+  /** 改开房选项、房间设置：每条连接 5 秒 10 次（每次都会广播给全房间）。 */
+  const settingsTooFast = () => overLimit(`settings:${socket.id}`, 10, 5_000);
 
   socket.on("lobby:get", (ack) => {
     ack({ ok: true, data: roomSummaries() });
   });
 
   socket.on("room:create", (payload, ack) => {
+    if (joinTooFast()) {
+      ack({ ok: false, error: "操作太频繁了，请稍后再试。" });
+      return;
+    }
     if (socketRooms.has(socket.id)) {
       ack({ ok: false, error: "请先离开当前房间，再创建新房间。" });
       return;
@@ -789,7 +878,9 @@ io.on("connection", (socket) => {
       voice: new Map(),
       timeouts: new Map(),
       botTimers: new Map(),
+      seatSessions: new Map(),
     };
+    rememberSeat(room, "p1", socket.id);
     rooms.set(code, room);
     socketRooms.set(socket.id, code);
     void socket.join(code);
@@ -798,6 +889,10 @@ io.on("connection", (socket) => {
   });
 
   socket.on("room:join", (payload, ack) => {
+    if (joinTooFast()) {
+      ack({ ok: false, error: "操作太频繁了，请稍后再试。" });
+      return;
+    }
     if (socketRooms.has(socket.id)) {
       ack({ ok: false, error: "请先离开当前房间，再加入新房间。" });
       return;
@@ -844,6 +939,10 @@ io.on("connection", (socket) => {
         ack({ ok: false, error: "房间里已有同名的人，请换一个昵称。" });
         return;
       }
+      if (login && seatedLogin(room, login)) {
+        ack({ ok: false, error: "你在这一桌有座位，不能再开一个窗口观战。" });
+        return;
+      }
       room.spectators.push({ id: socket.id, name });
       if (!viaList) room.invited.add(socket.id);
       socketRooms.set(socket.id, code);
@@ -870,7 +969,12 @@ io.on("connection", (socket) => {
       }
       clearTimeout(room.abandonTimer);
       delete room.abandonTimer;
+      if (login && spectatingLogin(room, login, socket.id)) {
+        ack({ ok: false, error: "你正在用另一个窗口观战这一桌，先关掉那个窗口再回座位。" });
+        return;
+      }
       reassignMember(room, seat.id, socket.id);
+      rememberSeat(room, seat.playerId, socket.id);
       socketRooms.set(socket.id, code);
       void socket.join(code);
       // 回来了：不再由人机代打（托管中的除外）
@@ -891,6 +995,10 @@ io.on("connection", (socket) => {
       ack({ ok: false, error: "房间里已有同名的人，请换一个昵称。" });
       return;
     }
+    if (login && spectatingLogin(room, login, socket.id)) {
+      ack({ ok: false, error: "你正在用另一个窗口观战这一桌，先关掉那个窗口再坐下。" });
+      return;
+    }
 
     const member: LobbyMember = {
       id: socket.id,
@@ -900,6 +1008,7 @@ io.on("connection", (socket) => {
       connected: true,
     };
     room.members.push(member);
+    rememberSeat(room, member.playerId, socket.id);
     socketRooms.set(socket.id, code);
     void socket.join(code);
     ack({ ok: true, data: snapshot(room, socket.id) });
@@ -907,9 +1016,18 @@ io.on("connection", (socket) => {
   });
 
   socket.on("room:access", (settings, ack) => {
+    if (settingsTooFast()) {
+      ack({ ok: false, error: "操作太频繁了，请稍后再试。" });
+      return;
+    }
     const room = findRoomForSocket(socket.id);
     if (!room || room.ownerId !== socket.id) {
       ack({ ok: false, error: "只有房主可以修改房间设置。" });
+      return;
+    }
+    // 「观战看手牌」只能在等候房间打开；对局中只能关（首发验收 I8：边打边开个观战窗口看别人的牌）
+    if (room.status !== "waiting" && settings?.spectatorsSeeAll === true && !room.access.spectatorsSeeAll) {
+      ack({ ok: false, error: "对局开始后不能再打开「观战看手牌」，这一场结束后回等候房间再改。" });
       return;
     }
     const next = { ...room.access };
@@ -933,6 +1051,10 @@ io.on("connection", (socket) => {
   });
 
   socket.on("room:options", (settings, ack) => {
+    if (settingsTooFast()) {
+      ack({ ok: false, error: "操作太频繁了，请稍后再试。" });
+      return;
+    }
     const room = findRoomForSocket(socket.id);
     if (!room || room.ownerId !== socket.id) {
       ack({ ok: false, error: "只有房主可以修改开房选项。" });
@@ -975,9 +1097,15 @@ io.on("connection", (socket) => {
       ack({ ok: false, error: "这个房间是邀请制，要有房间码才能坐下。" });
       return;
     }
+    if (login && spectatingLogin(room, login, socket.id)) {
+      ack({ ok: false, error: "你还有一个窗口在观战这一桌，先关掉那个窗口再坐下。" });
+      return;
+    }
     room.spectators = room.spectators.filter((candidate) => candidate.id !== socket.id);
     room.invited.delete(socket.id);
-    room.members.push({ id: socket.id, playerId: `p${room.nextSeat++}`, name: spectator.name, isHost: false, connected: true });
+    const seatId = `p${room.nextSeat++}`;
+    room.members.push({ id: socket.id, playerId: seatId, name: spectator.name, isHost: false, connected: true });
+    rememberSeat(room, seatId, socket.id);
     ack({ ok: true, data: undefined });
     emitRoomUpdate(room);
   });
@@ -1001,7 +1129,12 @@ io.on("connection", (socket) => {
       ack({ ok: false, error: "这个房间没有开放观战。" });
       return;
     }
+    if (login && seatedLogin(room, login, member.playerId)) {
+      ack({ ok: false, error: "你在这一桌还有别的座位，不能改成观战。" });
+      return;
+    }
     room.members = room.members.filter((candidate) => candidate.id !== socket.id);
+    room.seatSessions.delete(member.playerId);
     room.voice.delete(socket.id);
     room.spectators.push({ id: socket.id, name: member.name });
     room.invited.add(socket.id);
@@ -1190,12 +1323,12 @@ io.on("connection", (socket) => {
   });
 
   socket.on("admin:verify", (token, ack) => {
-    const error = checkAdminToken(socket.id, token);
+    const error = checkAdminToken(socket.id, ip, token);
     ack(error ? { ok: false, error } : { ok: true, data: undefined });
   });
 
   socket.on("admin:kick-session", (payload, ack) => {
-    const error = checkAdminToken(socket.id, payload?.token);
+    const error = checkAdminToken(socket.id, ip, payload?.token);
     if (error) {
       ack({ ok: false, error });
       return;
@@ -1213,7 +1346,7 @@ io.on("connection", (socket) => {
   });
 
   socket.on("admin:dissolve", (payload, ack) => {
-    const error = checkAdminToken(socket.id, payload?.token);
+    const error = checkAdminToken(socket.id, ip, payload?.token);
     if (error) {
       ack({ ok: false, error });
       return;
@@ -1319,6 +1452,12 @@ export const testHooks = {
     clearGameTimers(room);
     startRematchVote(room);
     emitRoomUpdate(room);
+  },
+  /** 服务端对局状态里的种子和随机数状态（只给测试看：确认服务器用的是 256 位密钥，I7）。 */
+  rngOf(code: string): { seed: GameState["seed"]; rngState: GameState["rngState"] } {
+    const room = rooms.get(code);
+    if (!room?.game) throw new Error("no game");
+    return { seed: room.game.seed, rngState: room.game.rngState };
   },
   /** 用指定种子重开当前对局，方便测试固定开局。 */
   reseed(code: string, seed: number): void {

@@ -130,11 +130,13 @@ describe("[规则核对] 观战视角", () => {
 		}
 		expect(findKeys(v, SERVER_ONLY)).toEqual([]);
 	});
-	it("房主开「观战看手牌」：看得到所有人的手牌和已选的牌，但牌堆顺序、种子仍然没有", () => {
+	it("房主开「观战看手牌」：看得到所有人的手牌，看不到扣下还没亮的牌（I8），牌堆顺序、种子仍然没有", () => {
 		const v = redactGameForSpectator(s, true);
+		expect(s.players.some((p) => p.selection !== null)).toBe(true);
 		for (const p of v.players) {
 			expect(p.hand).toEqual(player(s, p.id).hand);
-			expect(p.selection).toBe(player(s, p.id).selection);
+			expect(p.selection).toBeNull();
+			expect(p.selected).toBe(player(s, p.id).selected);
 		}
 		expect(findKeys(v, SERVER_ONLY)).toEqual([]);
 	});

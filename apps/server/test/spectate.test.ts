@@ -38,9 +38,14 @@ let httpServer: typeof import("../src/index.js").httpServer;
 let serverIo: typeof import("../src/index.js").io;
 let nameSeq = 0;
 
-function connect(): Promise<TestSocket> {
+/** session：模拟网关转来的 X-GC-Session（同一次登录的几个窗口）。 */
+function connect(session?: string): Promise<TestSocket> {
   return new Promise((resolve, reject) => {
-    const client: TestSocket = createClient(serverUrl, { transports: ["websocket"], reconnection: false });
+    const client: TestSocket = createClient(serverUrl, {
+      transports: ["websocket"],
+      reconnection: false,
+      extraHeaders: session ? { "x-gc-session": session } : {},
+    });
     clients.add(client);
     client.on("room:updated", (room) => latest.set(client, room));
     client.once("connect", () => resolve(client));
@@ -218,10 +223,11 @@ describe("观战和公开房间", () => {
       expect(secretsSeen(blind)).toBeLessThan(owners);
     }
 
-    expect((await access(host, { spectatorsSeeAll: true })).ok).toBe(true);
-    const godView = (await updateWhere(viewer, (snapshot) => snapshot.access.spectatorsSeeAll)).game!;
-    for (const key of SERVER_ONLY) expect(hiddenField((godView as unknown as Record<string, unknown>)[key])).toBe(true);
-    expect(secretsSeen(godView)).toBeGreaterThanOrEqual(owners);
+    // 对局中不能再打开「观战看手牌」（首发验收 I8），观战的人照样只有公开信息
+    const refused = await access(host, { spectatorsSeeAll: true });
+    expect(refused.ok).toBe(false);
+    expect(latest.get(host)!.access.spectatorsSeeAll).toBe(false);
+    expect(secretsSeen(latest.get(viewer)!.game!)).toBe(0);
 
     // 观战的人发动作会被拒。
     const anyAction = players.map((client) => legalActions(latest.get(client)!.game!, seatOf(client))[0]).find(Boolean);
@@ -231,6 +237,64 @@ describe("观战和公开房间", () => {
     // 对局中玩家不能改成观战；观战的人随时能离开。
     expect((await call<void>((ack) => players[1]!.emit("room:stand", ack))).ok).toBe(false);
     expect((await call<void>((ack) => viewer.emit("room:leave", ack))).ok).toBe(true);
+  });
+
+  it("「观战看手牌」在等候房间打开：对局中观战看得到所有人的手牌，但看不到扣下还没亮的牌；对局中能关不能开", async () => {
+    const host = await connect();
+    const room = await create(host, nick("玩家"));
+    expect((await access(host, { spectatorsSeeAll: true })).ok).toBe(true);
+    const players = [host, ...(await fillSeats(room.code, 1))];
+    const viewer = await connect();
+    expect((await join(viewer, { name: nick("看客"), code: room.code, spectate: true })).ok).toBe(true);
+    expect((await call<LobbyRoomSnapshot>((ack) => host.emit("room:start", ack))).ok).toBe(true);
+    for (const client of [viewer, ...players]) await updateWhere(client, (snapshot) => snapshot.game !== undefined);
+
+    // 第一位玩家扣下一张牌
+    const mover = players[0]!;
+    const before = latest.get(viewer)!.game!.version;
+    const card = latest.get(mover)!.game!.players.find((player) => player.id === seatOf(mover))!.hand[0]!;
+    expect((await call<LobbyRoomSnapshot>((ack) => mover.emit("game:command", { type: "select", card }, ack))).ok).toBe(true);
+    const god = (await updateWhere(viewer, (snapshot) => snapshot.game!.version !== before)).game!;
+    for (const key of SERVER_ONLY) expect(hiddenField((god as unknown as Record<string, unknown>)[key])).toBe(true);
+    for (const client of players) {
+      const own = latest.get(client)!.game!.players.find((player) => player.id === seatOf(client))!;
+      const seen = god.players.find((player) => player.id === own.id)!;
+      expect(seen.hand).toEqual(own.hand);
+    }
+    const picked = god.players.find((player) => player.id === seatOf(mover))!;
+    expect(picked.selected).toBe(true);
+    expect(god.players.every((player) => player.selection === null)).toBe(true);
+    expect(JSON.stringify(god)).not.toMatch(/"selection":\d/);
+
+    // 对局中可以关掉；关掉后不能再开
+    expect((await access(host, { spectatorsSeeAll: false })).ok).toBe(true);
+    const blind = (await updateWhere(viewer, (snapshot) => !snapshot.access.spectatorsSeeAll)).game!;
+    expect(secretsSeen(blind)).toBe(0);
+    expect((await access(host, { spectatorsSeeAll: true })).ok).toBe(false);
+  });
+
+  it("同一次登录不能在同一桌既坐着又观战（另开窗口看牌）", async () => {
+    const host = await connect("login-host");
+    const hostName = nick("玩家");
+    const room = await create(host, hostName);
+    expect((await access(host, { spectatorsSeeAll: true, open: true })).ok).toBe(true);
+    const second = await connect("login-host");
+    const summary = (await lobby(second)).find((candidate) => candidate.players.some((player) => player.name === hostName));
+    // 按房间码、按列表都进不来观战
+    const byCode = await join(second, { name: nick("小号"), code: room.code, spectate: true });
+    expect(byCode.ok).toBe(false);
+    expect(summary).toBeDefined();
+    expect((await join(second, { name: nick("小号"), roomId: summary!.id, spectate: true })).ok).toBe(false);
+
+    // 别的登录可以观战；观战的窗口所在的登录不能再坐下 / 加入
+    const otherWatcher = await connect("login-watch");
+    const watchName = nick("看客");
+    expect((await join(otherWatcher, { name: watchName, code: room.code, spectate: true })).ok).toBe(true);
+    const sameLogin = await connect("login-watch");
+    expect((await join(sameLogin, { name: nick("玩家"), code: room.code })).ok).toBe(false);
+    // 换一个登录就能正常坐下
+    const fresh = await connect("login-fresh");
+    expect((await join(fresh, { name: nick("玩家"), code: room.code })).ok).toBe(true);
   });
 
   it("房主关闭观战会把观战的人请出去；房间解散时观战的人也会收到通知", async () => {
