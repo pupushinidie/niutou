@@ -58,3 +58,23 @@
 /* 首页、等候房间的教程入口：跟着所在那一栏的间距走，不另加上边距 */
 .nt-home-hero .tut-invite, .nt-room-side .tut-invite { margin-top: 0; }
 .app-shell .nt-home-hero .tut-again, .app-shell .nt-room-side .tut-again { margin-top: 0; align-self: flex-start; }
+
+/* 等候房间右栏窄：邀请卡的按钮换到下一行 */
+.nt-room-side .tut-invite { flex-wrap: wrap; }
+.app-shell .nt-room-side .tut-invite .tut-invite-go { width: 100%; }
+
+/*
+ * 「第一次」小贴士别压在 4 排上：宽屏放在右边记录栏上面，中等宽度盖在顶栏上，手机放在顶部提示条下面（盖住别人的小头像）。
+ */
+.nt-screen.wide .tut-toast {
+  top: calc(var(--top-h) + var(--gap));
+  right: var(--pad);
+  left: auto;
+  translate: none;
+  width: var(--side-w);
+  flex-wrap: wrap;
+}
+.nt-screen.wide .tut-toast p { flex: 1 1 160px; }
+.nt-screen.wide .tut-toast-actions { display: flex; justify-content: flex-end; align-items: center; gap: 12px; width: 100%; }
+.nt-screen.mid .tut-toast { top: 2px; }
+.nt-screen.phone .tut-toast { top: 44px; }

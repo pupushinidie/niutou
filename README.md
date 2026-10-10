@@ -245,9 +245,25 @@ createSceneRoom(game, opts?: {
 - 规则 C：选排的人 4 排排头变成金色套索，点一排 → 「确认」（1–4 键 + 回车）；别人看到「某某正在选排」。
 - 每个动作都带 `step: stepKey(game)`。
 - 断线重连后自动用原昵称和房间码回到座位；回执比广播晚到的旧快照不会盖掉新局面。
-- 「提示」按钮（`showHint`，教程和练习局用）：`botHint` 替你选中那张牌 / 那一排并写理由，还要自己点确认。
+- 「提示」按钮（练习局、只有自己和人机的房间才有；预览页可用 `showHint` 强制打开；键盘 H）：`botHint` 替你选中那张牌 / 那一排，咕噜嘎贴在旁边说理由，还要自己点确认。
 - 页面在后台时标题提示「【该你选牌】」「【该你选排】」。
-- `data-tutorial` 锚点：`hand`、`hand-card`、`committed-card`、`confirm`、`undo`、`confirm-row`、`continue`、`cancel-auto`、`hint-button`、`prompt`、`timer`、`round`、`rows`（选排时带 `data-tutorial-state="choosing"`）、`row-1`…`row-4`、`row-bulls`、`sixth-slot`、`seats`、`seat`、`my-seat`、`seat-status`、`seat-bulls`、`seat-total`、`reveal-strip`、`log`、`round-end`、`final`、`rematch`、`rules-button`、`room-code`、`room-players`、`room-options`、`add-bot`、`start`。
+- `data-tutorial` 锚点：`hand`、`card:<牌号>`（每张手牌）、`committed-card`、`confirm`、`undo`、`confirm-row`、`continue`、`cancel-auto`、`hint-button`、`prompt`、`timer`、`round`、`rows`（选排时带 `data-tutorial-state="choosing"`）、`row-1`…`row-4`、`row-bulls`、`sixth-slot`、`seats`、`seat:<玩家 id>`（别人的座位卡，手机上是小头像）、`my-seat`、`seat-status`、`seat-bulls`、`seat-total`、`reveal-strip`、`log`、`round-end`、`final`、`rematch`、`rules-button`、`room-code`、`room-players`、`room-options`、`add-bot`、`start`。教程自己的按钮：`skip`、`exit`、`next`、`practice`、`end`、`again`、`final-actions`。
+
+## 新手教程
+
+做法照站内统一的教程（`~/projects/pipeline/handbook/tutorial-notes.md`，参考实现欲罢不能）。不连服务器：浏览器里直接跑规则引擎，牌桌就是真正的 `GameBoard`，咕噜嘎的对话框叠在上面。
+
+| 文件 | 内容 |
+|---|---|
+| `packages/game/src/tutorial.ts` | 剧本 `TUTORIAL_STEPS`（31 步：补充文件 2.2 的 3 人固定发牌，前 5 手按剧本出，加撤回、终局、托管几步讲解）、`createTutorialGame` / `createPracticeGame`（3 人、目标 33）、`tutorialActor` / `selfCanAct`（同时出牌：人机先选，你也可以先选）、`anchorVisible` |
+| `packages/game/test/tutorial.test.ts` | 剧本单测：从头走到尾每步合法、锚点看得见；关键几幕（二号收第六张、你用 5 挑第 3 排、55 把一号挤成第六张）一定发生；文案每步最多两句；剧本走完接练习局 60 局都能打到终局 |
+| `apps/web/src/tutorial/` | 共用教练层（`Coach.tsx`、`gulu.ts`、`Invite.tsx`、`storage.ts`、`tips.ts`、`tutorial.css` 从欲罢不能原样复制；`useTutorial.ts` 用七大奇迹带 `canAct` 的版本），本游戏的 `TutorialMode.tsx`（剧本局 + 练习局、亮牌动画放完才开口、选中牌后高亮挪到「确认」）、`tutorialGame.ts`（「提示」说法、小贴士）、`tutorial-niutou.css` |
+| `App.tsx` | 首页和等候房间的入口卡；地址带 `?tutorial` 直接打开；在等候房间看教程时房主一开局自动回牌桌 |
+| `GameBoard.tsx` | `selfMemberId`、`mode`（online / tutorial / practice）、`finalActions`；「提示」；「第一次遇到」小贴士（只在真实对局） |
+
+- 本机记录：`gm-tutorial-niutou`（done / skipped）、`gm-tips-niutou`（看过的小贴士）、全站 `gm-tips-off`。
+- 练习局里的人机用 `{ tie: 1.5 }`，比正式人机松一点；「提示」用默认强度。
+- 走查脚本：`~/projects/qa-reports/tools/niutou-tut.mjs <输出目录> <flow|skip|waiting|room> <尺寸> <主题>`（`SHORT=1` 只走到练习局开头）。
 
 ## 画面：白天版和夜间版
 
