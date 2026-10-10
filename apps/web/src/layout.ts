@@ -57,6 +57,9 @@ const MARGIN = 12;
 const SIDE_MIN = 260;
 const SIDE_MAX = 420;
 const ACTION_MIN = 200;
+/** 提示区比这窄时走紧凑排法（倒计时挪到按钮那一行、按钮矮一点）。 */
+export const ACTION_TIGHT = 260;
+const ACTION_TIGHT_BAR_H = 118;
 
 function desktop(vw: number, vh: number, rows: CardSize, hand: CardSize, tight: boolean): Layout | null {
   const cell = cardPx(rows);
@@ -70,7 +73,7 @@ function desktop(vw: number, vh: number, rows: CardSize, hand: CardSize, tight: 
   const headW = cell.w > 84 ? 72 : 56;
   const tableH = 4 * cell.h + 3 * rowGap + 2 * pad + 2 * rim;
   const tableW = headW + 6 + 6 * cell.w + 5 * cellGap + 2 * pad + 2 * rim;
-  const handBarH = handCard.h + 32;
+  let handBarH = handCard.h + 32;
   if (topH + gap + tableH + gap + handBarH + gap > vh) return null;
 
   // 横向：两列玩家卡 + 牌桌 + 侧栏（侧栏放不下就进抽屉）
@@ -99,6 +102,11 @@ function desktop(vw: number, vh: number, rows: CardSize, hand: CardSize, tight: 
   const meW = Math.min(seatW, Math.max(smallSeat, rest - ACTION_MIN));
   const actionW = rest - meW;
   if (actionW < ACTION_MIN || meW < smallSeat) return null;
+  // 提示区窄（1024 一类）：提示一行 + 说明两行 + 按钮一行要 105px 高，竖向有空就把手牌栏加高（首发验收 I6/I15）
+  if (actionW < ACTION_TIGHT) {
+    const want = Math.max(handBarH, ACTION_TIGHT_BAR_H);
+    if (topH + gap + tableH + gap + want + gap <= vh) handBarH = want;
+  }
 
   return {
     mode: sideW > 0 ? "wide" : "mid",

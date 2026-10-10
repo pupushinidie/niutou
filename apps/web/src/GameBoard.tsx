@@ -26,7 +26,7 @@ import {
 } from "./art.js";
 import FlyLayer from "./FlyLayer.js";
 import GameRules from "./GameRules.js";
-import { pickLayout, seatColumns, type Layout, type SeatSize } from "./layout.js";
+import { ACTION_TIGHT, pickLayout, seatColumns, type Layout, type SeatSize } from "./layout.js";
 import { boardFrame, useRevealPlayback, type PlaybackOptions } from "./reveal.js";
 import { GameRoomMenu } from "./RoomExtras.js";
 import { socket } from "./socket.js";
@@ -417,7 +417,7 @@ function GameBoard(props: GameBoardProps) {
     for (const event of game.events) {
       if (event.type === "RoundEnded") lines.push({ key: `e${game.version}-re`, text: `第 ${event.round} 局结束` });
       if (event.type === "GameEnded") lines.push({ key: `e${game.version}-ge`, text: `游戏结束：${event.winners.map(nameOf).join("、")} 罚分最少` });
-      if (event.type === "TimedOut") lines.push({ key: `e${game.version}-to`, text: `${event.players.map(nameOf).join("、")} 超时，系统代${event.phase === "chooseRow" ? "选排" : event.phase === "roundEnd" ? "点继续" : "出牌"}` });
+      if (event.type === "TimedOut") lines.push({ key: `e${game.version}-to`, text: event.phase === "roundEnd" ? "时间到，自动开始下一局" : `${event.players.map(nameOf).join("、")} 超时，系统代${event.phase === "chooseRow" ? "选排" : "出牌"}` });
     }
     seen.version = game.version;
     const fresh = [...lines].reverse();
@@ -448,7 +448,7 @@ function GameBoard(props: GameBoardProps) {
     const timedOut = game.events.find((event) => event.type === "TimedOut");
     if (timedOut && timedOut.type === "TimedOut" && selfId && timedOut.players.includes(selfId)) {
       const mine = game.reveal?.plays.find((play) => play.player === selfId)?.card;
-      showFlash(timedOut.phase === "chooseRow" ? "你超时了，系统替你选了一排。" : timedOut.phase === "roundEnd" ? "已自动开始下一局。" : `你超时了，系统替你出了${mine !== undefined ? ` ${mine}` : "牌"}。`, true);
+      showFlash(timedOut.phase === "chooseRow" ? "你超时了，系统替你选了一排。" : timedOut.phase === "roundEnd" ? "已自动开始下一局。" : `你超时了，系统替你出了${mine !== undefined ? ` ${mine}` : "牌"}。`, timedOut.phase !== "roundEnd");
     }
   }, [game.version]);
   useEffect(() => () => {
@@ -487,6 +487,8 @@ function GameBoard(props: GameBoardProps) {
   }, [picked, game.rows, game.phase]);
 
   // ---------- 提示文字（最显眼的那一行） ----------
+  /** 桌面上提示区窄（1024）：倒计时挪到按钮行，有临时提示时先不显示说明（I6/I15）。 */
+  const tightAction = layout.mode !== "phone" && layout.actionW < ACTION_TIGHT;
   let prompt: string;
   let sub = "";
   if (anim) {
@@ -518,7 +520,7 @@ function GameBoard(props: GameBoardProps) {
       prompt = pickedRow === null ? "挑一排收走" : `收${ROW_LABEL[pickedRow]}？`;
       sub = pickedRow === null ? `你的 ${lowPlay?.card ?? ""} 比所有排尾都小，点一排（数字是牛头）` : `罚 ${sumBulls(game.rows[pickedRow]!)} 个牛头，你的牌成为这一排的第一张`;
     } else {
-      prompt = `${nameOf(game.chooser!)}正在选排`;
+      prompt = tightAction ? `等${nameOf(game.chooser!)}选排` : `${nameOf(game.chooser!)}正在选排`;
       sub = `${nameOf(game.chooser!)} 的 ${lowPlay?.card ?? ""} 比所有排尾都小，要挑一排收走`;
     }
   } else {
@@ -664,6 +666,10 @@ function GameBoard(props: GameBoardProps) {
   );
 
   // ---------- 主按钮 ----------
+  const timer = showTimer && (
+    <b className={urgent ? "nt-timer urgent" : "nt-timer"} data-tutorial="timer" title="这一步还剩的时间">{secondsLeft}<small>秒</small></b>
+  );
+
   const mainButtons = (
     <div className="nt-buttons">
       {canSelect && (picked !== null || committed === null) && (
@@ -694,6 +700,7 @@ function GameBoard(props: GameBoardProps) {
       ) : (
         <span data-tutorial="hint-button" className="nt-hint-anchor" />
       )}
+      {tightAction && timer}
     </div>
   );
 
@@ -710,19 +717,15 @@ function GameBoard(props: GameBoardProps) {
     </div>
   );
 
-  const timer = showTimer && (
-    <b className={urgent ? "nt-timer urgent" : "nt-timer"} data-tutorial="timer" title="这一步还剩的时间">{secondsLeft}<small>秒</small></b>
-  );
-
   const flashLine = flash && <p className={flash.bad ? "nt-flash bad" : "nt-flash"} role={flash.bad ? "alert" : "status"}>{flash.text}</p>;
 
   const actionPanel = (
-    <div className={`nt-action${urgent ? " urgent" : ""}${autoPlaying ? " auto" : ""}`} data-tutorial="prompt">
+    <div className={`nt-action${urgent ? " urgent" : ""}${autoPlaying ? " auto" : ""}${tightAction ? " tight" : ""}`} data-tutorial="prompt">
       <div className="nt-prompt-line">
         <strong className="nt-prompt" role="status">{prompt}</strong>
-        {timer}
+        {!tightAction && timer}
       </div>
-      {sub && <p className={preview?.bad && picked !== null ? "nt-sub bad" : "nt-sub"}>{sub}</p>}
+      {sub && !(tightAction && flashLine) && <p className={preview?.bad && picked !== null ? "nt-sub bad" : "nt-sub"}>{sub}</p>}
       {flashLine}
       {spectatePanel || mainButtons}
     </div>
@@ -961,6 +964,29 @@ function RoundEndPanel({ game, myId, seconds, canContinue, busy, onContinue }: {
   );
 }
 
+/**
+ * 「再来一局」倒计时：服务器只在房间更新时带一个 remainingMs 快照，这里按收到的时刻换算成截止时间、每秒刷新
+ * （首发验收 I14：以前直接显示快照，60 秒一直不动，到点就被移出房间）。
+ */
+function useRematchSeconds(remainingMs: number | undefined): number | null {
+  const [deadline, setDeadline] = useState<number | null>(null);
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (remainingMs === undefined) {
+      setDeadline(null);
+      return;
+    }
+    setDeadline(Date.now() + remainingMs);
+    setNow(Date.now());
+  }, [remainingMs]);
+  useEffect(() => {
+    if (deadline === null) return undefined;
+    const timer = setInterval(() => setNow(Date.now()), 250);
+    return () => clearInterval(timer);
+  }, [deadline]);
+  return deadline === null ? null : Math.max(0, Math.ceil((deadline - now) / 1000));
+}
+
 function FinalDialog({ game, room, myId, memberId, spectating, onRematch, onLeave, actions }: {
   game: GameState;
   room: LobbyRoomSnapshot;
@@ -975,6 +1001,7 @@ function FinalDialog({ game, room, myId, memberId, spectating, onRematch, onLeav
 }) {
   const result = game.finalResult!;
   const accepted = room.rematch?.acceptedIds.includes(memberId) ?? false;
+  const rematchSeconds = useRematchSeconds(room.rematch?.remainingMs);
   const rows = [...game.players].sort((a, b) => a.total - b.total);
   const winners = result.winners.map((id) => game.players.find((player) => player.id === id)!);
   const maxTotal = Math.max(...game.players.map((player) => player.total));
@@ -1034,7 +1061,7 @@ function FinalDialog({ game, room, myId, memberId, spectating, onRematch, onLeav
           </div>
         ) : room.rematch && (
           <div className="nt-rematch" data-tutorial="rematch">
-            <span>再来一局？还剩 {Math.ceil(room.rematch.remainingMs / 1000)} 秒（{room.rematch.acceptedIds.length}/{room.members.length} 人同意）</span>
+            <span>再来一局？还剩 {rematchSeconds ?? Math.ceil(room.rematch.remainingMs / 1000)} 秒（{room.rematch.acceptedIds.length}/{room.members.length} 人同意）</span>
             <div className="gm-panel-actions">
               <button className="quiet-button" type="button" onClick={() => onRematch(false)}>离开</button>
               <button className="primary-button nt-big" type="button" disabled={accepted} onClick={() => onRematch(true)}>{accepted ? "等待其他人" : "再来一局"}</button>

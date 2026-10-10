@@ -434,3 +434,16 @@
 .nt-final-head { align-items: flex-start; }
 .nt-final-head .nt-star { margin-top: 4px; }
 .nt-final-head .nt-sparkle { right: auto; left: -10px; top: -10px; }
+/* 局末结算：「继续」一直贴在弹窗底部（10 人局表格长，手机上在弹窗里滚动，首发验收 I12） */
+.app-shell .gm-panel.nt-round-end .gm-panel-actions { position: sticky; bottom: -22px; margin: 8px -24px -22px; padding: 10px 24px; background: var(--panel); box-shadow: 0 calc(var(--px) * -1) 0 0 #4a3020; z-index: 1; }
+@media (max-width: 699px) {
+  .app-shell .gm-panel.nt-round-end .gm-panel-actions { bottom: -14px; margin: 8px -12px -14px; padding: 8px 12px; }
+  .nt-round-end .nt-score-table td { padding: 2px 4px; }
+  .nt-round-end .nt-mini-avatar, .nt-round-end .nt-mini-avatar img { width: 32px; height: 32px; }
+}
+/* 提示区窄（1024 一类，I6/I15）：说明最多两行、不被按钮挤成半行；倒计时在按钮行最右；按钮矮一点 */
+.nt-action.tight .nt-sub { flex: 0 0 auto; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.nt-action.tight .nt-flash { flex: 0 0 auto; }
+.nt-action.tight .nt-buttons .nt-timer { margin-left: auto; }
+.nt-action.tight .nt-buttons { gap: 6px; min-height: 28px; }
+.nt-screen .nt-action.tight .nt-big { min-height: 36px; padding: 4px 12px; }

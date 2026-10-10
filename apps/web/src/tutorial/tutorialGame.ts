@@ -85,7 +85,8 @@ export function detectTips(game: GameState, selfId: string, auto: boolean): stri
   }
   if (auto) ids.push("auto-self");
   for (const event of game.events) {
-    if (event.type === "TimedOut" && event.players.includes(selfId)) ids.push("timeout");
+    // 局末到点自动开下一局是正常流程，不算超时、不提托管（首发验收 I27）
+    if (event.type === "TimedOut" && event.phase !== "roundEnd" && event.players.includes(selfId)) ids.push("timeout");
   }
   for (const event of game.events) {
     if (event.type === "RowTaken" && event.reason === "sixth" && event.player !== selfId) ids.push("sixth-other");

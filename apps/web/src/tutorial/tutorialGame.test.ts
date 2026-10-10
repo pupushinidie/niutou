@@ -64,6 +64,14 @@ describe("「第一次遇到」小贴士", () => {
     expect(detectTips(last, "p1", false)).toContain("round-end");
   });
 
+  it("局末到点自动开下一局：不提示「你超时了」（I27）", () => {
+    let last = buildGame({ players: [{ hand: [60] }, { hand: [70] }], rows: [[10], [40], [50], [90]] });
+    last = playHand(last, [60, 70]);
+    const next = timeoutTurn(last);
+    expect(next.events.some((event) => event.type === "TimedOut" && event.phase === "roundEnd")).toBe(true);
+    expect(detectTips(next, "p1", false)).not.toContain("timeout");
+  });
+
   it("每条小贴士都有标题和内容，最多两句", () => {
     for (const [id, tip] of Object.entries(TIPS)) {
       expect(tip.title.length, id).toBeGreaterThan(0);

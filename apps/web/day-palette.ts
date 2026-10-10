@@ -32,6 +32,7 @@ export const palette: DayPalette = {
     "#f25c5c": "#d1303f",
     "#ff9a8a": "#c0392b",
     "#b7f0c0": "#1f6b35",
+    "#8ec0ff": "#1d4f9e", // 托管中的蓝字（首发验收 I13：白天米白底上浅蓝看不清）
   },
   background: {},
   values: {
