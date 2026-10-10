@@ -16,6 +16,8 @@ OUT = pathlib.Path(__file__).resolve().parent / "out" / "r1"
 
 
 def index_of(path: pathlib.Path) -> int:
+    if path.stem == path.parent.name:  # 第一张没有序号（名字里本身可能带数字，比如 head-16）
+        return 0
     m = re.search(r"-(\d+)$", path.stem)
     return int(m.group(1)) if m else 0
 

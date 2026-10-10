@@ -1,1 +1,49 @@
-{ "_说明": "选定的美术，路径相对 art/out/。由美术阶段填写。" }
+{
+ "_说明": "选定的美术，src 相对 art/out/。export.py 按这里导出到 art/out/final/，gallery.py 按 _gallery 出画廊。2026-10-10 美术自查自选。",
+ "_static/thinking": "r1/thinking/thinking-44.png",
+ "_static/tumbleweed": "r1/tumbleweed/tumbleweed-13.png",
+ "_static/lamp": "r1/lamp/lamp-24.png",
+
+ "cards/cards-lg.png": {"op": "cards", "face": "B", "back": "r1/back/back-s313.png", "why": "羊皮纸颗粒底 + 黄铜铆钉最有西部味；牌背用 PixelLab 的酒红金花纹小牛章"},
+ "cards/cards-sm.png": {"op": "cards", "face": "B", "back": "r1/back/back-s313.png", "why": "和 lg 同一套"},
+ "cards/slot-lg.png": {"op": "code", "fn": "slot", "style": "B", "why": "暗一点的凹槽 + 四角缝线，空位一眼看得出又不抢牌"},
+ "cards/slot-sm.png": {"op": "code", "fn": "slot", "style": "B", "why": "同上"},
+ "cards/danger-lg.png": {"op": "code", "fn": "danger", "style": "D", "why": "红斜纹 + 红虚线框 + 放大的淡牛头，最像「第 6 张就收牌」的警示"},
+ "cards/danger-sm.png": {"op": "code", "fn": "danger", "style": "D", "why": "同上"},
+ "cards/danger-strip-sm.png": {"op": "code", "fn": "danger", "style": "D", "why": "同上"},
+ "table/felt.png": {"op": "code", "fn": "felt", "style": "A", "why": "均匀细颗粒、四边无缝；PixelLab 毡面是荧光绿或带渐变，不能平铺"},
+ "table/rim.png": {"op": "code", "fn": "rim", "style": "A", "why": "木边 + 黄铜内线，和场景里的牌桌一致"},
+
+ "scene/night-0.png": {"op": "scene", "src": "r1/scenes/night-s32fix-L1R1.png", "why": "开工拍板那张夜景，墙上两个牛头骨已经重画成牛仔帽和马蹄铁套索；牌桌正好在下方中间"},
+ "scene/night-1.png": {"op": "scene", "src": "r2/scenes/s37-fix-912-full.png", "why": "弹簧门开着看得到夜街，构图和 night-0 不同；右上带角的帽子重画成普通牛仔帽"},
+ "scene/day-0.png": {"op": "scene", "src": "r1/scenes/day-s48.png", "why": "门廊框住的小镇、牧场长角牛、平顶山，牌桌在下方中间"},
+ "scene/day-1.png": {"op": "scene", "src": "r2/scenes/day-s42.png", "why": "开工拍板那张白天样张，吊牌是空白木板，没有字"},
+ "scene/hero.png": {"op": "scene", "src": "r1/scenes/hero-s73.png", "why": "黄昏的酒馆门口，招牌是空白木板；s71/s72 招牌有乱码字"},
+
+ "ui/head-32.png": {"op": "icon", "src": "r1/head-32/head-32-24.png", "why": "浅棕圆脸、短角、大眼睛，深浅两种底上都跳得出来"},
+ "ui/head-16.png": {"op": "icon", "src": "r1/head-16/head-16-1.png", "why": "待定"},
+ "ui/ready.png": {"op": "copy", "src": "r2/icons/ready-a.png", "why": "代码画：和牌背同色的扣着小牌 + 绿对勾；v2 出的全是品红牌配荧光绿"},
+ "ui/lasso.png": {"op": "icon", "src": "r1/lasso/lasso-37.png", "brighten": 0.22, "why": "绳圈在上、绳头垂下，最像套索，不像字母；提亮绳子让夜间底上也看得清"},
+ "ui/sheriff-star.png": {"op": "icon", "src": "r1/sheriff-star/sheriff-star.png", "why": "带圆球角的警徽造型，面上光滑不刻字"},
+ "ui/king-bull.png": {"op": "icon", "src": "r1/king-bull/king-bull-11.png", "why": "戴镶宝石小王冠、得意眯眼的牛，搞笑不凶"},
+ "ui/poster.png": {"op": "code", "fn": "poster", "src": "r1/poster/poster-s323.png", "why": "PixelLab 的焦边羊皮纸 + 四角钉子，代码补上 spec 位置的头像框；纸上没有字"},
+ "ui/thinking.png": {"op": "copy", "src": "r2/fx/thinking-a.png", "why": "沙子从上漏到下、再横过来翻面，4 帧循环"},
+
+ "avatars/avatar-0.png": {"op": "avatar", "seat": 0, "src": "r1/avatar-0-fox/avatar-0-fox-9.png", "scarf": [0, 14, 18], "why": "笑眯眯的狐狸，红围巾清楚"},
+ "avatars/avatar-1.png": {"op": "avatar", "seat": 1, "src": "r1/avatar-1-bear/avatar-1-bear-3.png", "scarf": [210, 25, 18], "why": "帽子上蓝带、蓝围巾，没有警徽和眼罩"},
+ "avatars/avatar-2.png": {"op": "avatar", "seat": 2, "src": "r1/avatar-2-rabbit/avatar-2-rabbit-22.png", "scarf": [100, 35, 18, 0.12], "why": "棕白兔、耳朵竖着，睁眼"},
+ "avatars/avatar-3.png": {"op": "avatar", "seat": 3, "src": "r1/avatar-3-raccoon/avatar-3-raccoon-22.png", "scarf": [45, 15, 18], "why": "眼罩纹清楚、黄围巾"},
+ "avatars/avatar-4.png": {"op": "avatar", "seat": 4, "src": "r1/avatar-4-cat/avatar-4-cat-21.png", "scarf": [288, 30, 18], "why": "灰狸花猫微笑，紫围巾"},
+ "avatars/avatar-5.png": {"op": "avatar", "seat": 5, "src": "r1/avatar-5-dog/avatar-5-dog-9.png", "why": "金棕梗犬，不是米格鲁花色；围巾和毛色接近，不换色（色相蒙版会连毛一起换）"},
+ "avatars/avatar-6.png": {"op": "avatar", "seat": 6, "src": "r1/avatar-6-owl/avatar-6-owl-12.png", "scarf": [172, 22, 18], "why": "大眼睛猫头鹰，青色围巾"},
+ "avatars/avatar-7.png": {"op": "avatar", "seat": 7, "src": "r1/avatar-7-horse/avatar-7-horse.png", "why": "待定"},
+ "avatars/avatar-8.png": {"op": "avatar", "seat": 8, "src": "r1/avatar-8-goat/avatar-8-goat-10.png", "why": "弯角、小胡子的山羊，白围巾已经接近座位色"},
+ "avatars/avatar-9.png": {"op": "avatar", "seat": 9, "src": "r1/avatar-9-pig/avatar-9-pig-4.png", "why": "粉猪、炭灰围巾"},
+
+ "fx/dust.png": {"op": "copy", "src": "r2/fx/dust-a.png", "why": "几团尘从底部往两边扬起再往上散，最后一帧全空"},
+ "fx/heads-pop.png": {"op": "copy", "src": "r2/fx/heads-pop-a.png", "why": "用定稿的 16px 牛头往上飘、旁边闪星，最后一帧全空"},
+ "fx/sparkle.png": {"op": "copy", "src": "r2/fx/sparkle-a.png", "why": "三颗星错开闪，夜间、白天底上都看得见（橙棕外圈）"},
+ "fx/lamp.png": {"op": "copy", "src": "r2/fx/lamp-a.png", "why": "PixelLab 煤油灯 + 手画 4 帧火苗跳动"},
+ "sprites/calf-run.png": {"op": "copy", "src": "r3/calf-run.png", "why": "待定"},
+ "sprites/tumbleweed.png": {"op": "copy", "src": "r2/fx/tumbleweed-a.png", "why": "外轮廓不动、里面枝条每帧转 45°，往右滚，带小弹跳"}
+}

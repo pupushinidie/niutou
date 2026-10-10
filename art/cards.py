@@ -59,7 +59,8 @@ def face(n: int, size: str, style: str) -> Image.Image:
             for x, y in ((inset + 4, inset + 4), (w - inset - 5, inset + 4), (inset + 4, h - inset - 5), (w - inset - 5, h - inset - 5)):
                 d.point([(x, y), (x - 1, y), (x + 1, y), (x, y - 1), (x, y + 1)], fill=shade(base, 0.78))
     dark_bg = lum(base) < 140
-    colors = {"H": cream if dark_bg else ink, "E": base, "S": rgba(P["snout"]), "K": shade(rgba(P["snout"]), 0.6)}
+    # 深底牌上的牛脸是奶白色，眼睛用深棕点（挖空成底色会像骷髅眼窝）
+    colors = {"H": cream if dark_bg else ink, "E": ink if dark_bg else base, "S": rgba(P["snout"]), "K": shade(rgba(P["snout"]), 0.6)}
     hw = len(head[0])
     top, bottom = ph.LAYOUT[k]
     for count, y in ((top, top_y), (bottom, bot_y)):
@@ -112,7 +113,24 @@ def back(size: str, style: str, pattern: Image.Image | None = None) -> Image.Ima
     cx, cy = w // 2, h // 2
     r = hw // 2 + (4 if size == "lg" else 3)
     d.ellipse([cx - r, cy - r, cx + r - 1, cy + r - 1], fill=c2, outline=gold)
-    stamp(img, head, cx - hw // 2, cy - hh // 2, {"H": gold, "E": c2, "S": gold, "K": c2})
+    # 圆章里的小牛脸：金色脸、深棕眼睛、粉鼻子（单色挖空的眼窝像骷髅，不用）
+    stamp(img, head, cx - hw // 2, cy - hh // 2, {"H": gold, "E": ink, "S": rgba(P["snout"]), "K": shade(rgba(P["snout"]), 0.6)})
+    return img
+
+
+def back_from_pattern_sm(pattern: Image.Image) -> Image.Image:
+    """把 PixelLab 出的 40×56 牌背图案缩成 sm（28×38）：先 BOX 缩到 26×36，再收回原图的调色（不留新的中间色）。"""
+    w, h, *_rest, inset = ph.SIZES["sm"]
+    pat = pattern.convert("RGB").crop((1, 1, 39, 55))
+    small = pat.resize((w - 2, h - 2), Image.BOX)
+    pal_img = pat.quantize(colors=12, method=Image.Quantize.MEDIANCUT)
+    small = small.quantize(palette=pal_img, dither=Image.Dither.NONE).convert("RGBA")
+    img = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+    img.alpha_composite(small, (1, 1))
+    d = ImageDraw.Draw(img)
+    d.rectangle([0, 0, w - 1, h - 1], outline=rgba(P["ink"]))
+    for x, y in ((0, 0), (w - 1, 0), (0, h - 1), (w - 1, h - 1)):
+        img.putpixel((x, y), (0, 0, 0, 0))
     return img
 
 
@@ -161,6 +179,13 @@ def danger(w: int, h: int, size: str, style: str) -> Image.Image:
     k = 2 if w >= 28 else 1
     if style == "A":
         return ph.danger(w, h, head)
+    if style == "D":  # A 的改进版：斜纹 + 虚线框不变，淡牛头放大 2 倍（窄条 1 倍），眼睛挖空、鼻子淡红
+        img = ph.danger(w, h, ["."])
+        head = HEADS["lg"] if w >= 28 else HEADS["sm"]
+        hw, hh = len(head[0]) * k, len(head) * k
+        stamp2(img, head, (w - hw) // 2, (h - hh) // 2,
+               {"H": rgba(P["cream"], 210), "S": rgba(P["snout"], 220), "K": rgba("#5a1c18", 220)}, k)
+        return img
     img = Image.new("RGBA", (w, h), (0, 0, 0, 0))
     d = ImageDraw.Draw(img)
     red, dark = rgba(P["danger"]), rgba("#5a1c18")
@@ -268,6 +293,22 @@ def poster() -> Image.Image:
     for x, y in ((6, 6), (57, 6), (6, 73), (57, 73)):
         d.rectangle([x - 1, y - 1, x, y], fill=rgba(P["brass_dk"]))
         img.putpixel((x - 1, y - 1), rgba(P["brass"]))
+    return img
+
+
+def poster_from(pattern: Image.Image) -> Image.Image:
+    """PixelLab 出的空白羊皮纸（64×80，透明底）上补头像框：内部 (16,23)–(47,54)，框线 (15,22)–(48,55)，和代码版位置一样。"""
+    img = pattern.convert("RGBA").copy()
+    px = img.load()
+    for y in range(img.height):  # 半透明边缘收成全透明/全不透明
+        for x in range(img.width):
+            r, g, b, a = px[x, y]
+            px[x, y] = (r, g, b, 255) if a >= 128 else (0, 0, 0, 0)
+    paper = img.getpixel((32, 38))
+    d = ImageDraw.Draw(img)
+    d.rectangle([15, 22, 48, 55], fill=shade(paper, 0.72), outline=rgba(P["ink"]))
+    d.line([16, 56, 48, 56], fill=shade(paper, 0.82))  # 框下一道阴影
+    d.line([49, 23, 49, 56], fill=shade(paper, 0.82))
     return img
 
 

@@ -479,11 +479,12 @@ def generate() -> None:
     print(f"共 {len(files)} 个文件 → {OUT}；哈希表 {MANIFEST}")
 
 
-def check() -> int:
+def check(root: pathlib.Path = OUT) -> int:
+    """root 默认 public/art；正式美术定稿用 --dir art/out/final 查。"""
     manifest = json.loads(MANIFEST.read_text())
     still, missing, wrong = [], [], []
     for rel, info in manifest.items():
-        path = OUT / rel
+        path = root / rel
         if not path.exists():
             missing.append(rel)
             continue
@@ -523,6 +524,8 @@ def sheet() -> None:
 
 if __name__ == "__main__":
     if "--check" in sys.argv:
+        if "--dir" in sys.argv:
+            sys.exit(check(pathlib.Path(sys.argv[sys.argv.index("--dir") + 1]).resolve()))
         sys.exit(check())
     if "--sheet" in sys.argv:
         sheet()
