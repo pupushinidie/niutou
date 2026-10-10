@@ -11,7 +11,7 @@
 ```bash
 npm install
 npm run dev          # 服务端 :3015，网页 :5188（WEB_PORT / SERVER_PORT 可改，见下）
-npm test             # 146 个测试：规则书 TC1–TC13、例 1/2、补充文件的局面、2–10 人各 300 局随机对局、隐藏信息、服务器全流程
+npm test             # 311 个测试：规则书 TC1–TC13、例 1/2、补充文件的局面、2–10 人各 300 局随机对局、隐藏信息、服务器全流程
 npm run typecheck
 BASE_PATH=/niutou/ npm run build
 ```
