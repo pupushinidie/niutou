@@ -149,6 +149,8 @@ def slot(w: int, h: int, style: str) -> Image.Image:
     line = rgba(P["felt_line"], 190)
     if style == "A":
         return ph.slot(w, h)
+    if style == "D":
+        return slot_d(w, h)
     if style == "B":  # 暗一点的凹槽 + 四角
         d.rectangle([0, 0, w - 1, h - 1], fill=rgba(P["felt_dk"], 150))
         for x, y, dx, dy in ((0, 0, 1, 1), (w - 1, 0, -1, 1), (0, h - 1, 1, -1), (w - 1, h - 1, -1, -1)):
@@ -218,6 +220,8 @@ def danger(w: int, h: int, size: str, style: str) -> Image.Image:
 
 def felt(style: str) -> Image.Image:
     """64×64 无缝毡面。A 均匀细颗粒；B 颗粒 + 极淡的斜向绒毛；C 两色抖动。"""
+    if style == "D":
+        return felt_d()
     rng = random.Random({"A": 1, "B": 2, "C": 3}[style])
     base, dk, lt = rgba(P["felt"]), rgba(P["felt_dk"]), rgba(P["felt_lt"])
     img = Image.new("RGBA", (64, 64), base)
@@ -242,8 +246,69 @@ def felt(style: str) -> Image.Image:
     return img
 
 
+def felt_d() -> Image.Image:
+    """毡面 D：A 的细颗粒 + 很淡的大块明暗（周期 64 的格点噪声，天生四边无缝）+ 短绒毛。"""
+    rng = random.Random(44)
+    n = 8  # 8×8 个格点，周期 64
+    grid = [[rng.random() for _ in range(n)] for _ in range(n)]
+
+    def noise(x: float, y: float) -> float:
+        gx, gy = x / 64 * n, y / 64 * n
+        x0, y0 = int(gx) % n, int(gy) % n
+        x1, y1 = (x0 + 1) % n, (y0 + 1) % n
+        fx, fy = gx - int(gx), gy - int(gy)
+        fx, fy = fx * fx * (3 - 2 * fx), fy * fy * (3 - 2 * fy)
+        top = grid[y0][x0] * (1 - fx) + grid[y0][x1] * fx
+        bot = grid[y1][x0] * (1 - fx) + grid[y1][x1] * fx
+        return top * (1 - fy) + bot * fy
+
+    base, dk, lt = rgba(P["felt"]), rgba(P["felt_dk"]), rgba(P["felt_lt"])
+    mid_dk, mid_lt = shade(base, 0.95), shade(base, 1.04)
+    img = Image.new("RGBA", (64, 64), base)
+    for y in range(64):
+        for x in range(64):
+            v = noise(x, y)
+            if v < 0.3 and (x + y) % 2 == 0:
+                img.putpixel((x, y), mid_dk)
+            elif v > 0.72 and (x + y) % 2 == 0:
+                img.putpixel((x, y), mid_lt)
+    for _ in range(220):
+        x, y = rng.randrange(64), rng.randrange(64)
+        img.putpixel((x, y), dk if rng.random() < 0.6 else lt)
+    for _ in range(36):  # 短绒毛：斜 2 像素
+        x, y = rng.randrange(64), rng.randrange(64)
+        img.putpixel((x, y), shade(base, 1.08))
+        img.putpixel(((x + 1) % 64, (y + 1) % 64), shade(base, 1.08))
+    return img
+
+
+def felt_from(pattern: Image.Image) -> Image.Image:
+    """PixelLab 出的毡面纹理（64×64，带渐变、不能平铺）：去掉大块明暗只留细纹，交叉淡入做成四边无缝，再收进毡面 4 色。"""
+    from PIL import ImageFilter
+    g = pattern.convert("L").resize((64, 64), Image.NEAREST)
+    blur = g.filter(ImageFilter.GaussianBlur(6))
+    hp = [[g.getpixel((x, y)) - blur.getpixel((x, y)) for x in range(64)] for y in range(64)]
+    out = [[0.0] * 64 for _ in range(64)]
+    for y in range(64):
+        for x in range(64):
+            w = min(min(x, 63 - x), min(y, 63 - y)) / 31.5  # 边上 0、中间 1
+            out[y][x] = w * hp[y][x] + (1 - w) * hp[(y + 32) % 64][(x + 32) % 64]
+    vals = sorted(v for row in out for v in row)
+    lo, q, hi = vals[len(vals) * 10 // 100], vals[len(vals) * 32 // 100], vals[len(vals) * 92 // 100]
+    dk, base, lt = rgba(P["felt_dk"]), rgba(P["felt"]), rgba(P["felt_lt"])
+    mid_dk = shade(base, 0.93)
+    img = Image.new("RGBA", (64, 64), base)
+    for y in range(64):
+        for x in range(64):
+            v = out[y][x]
+            img.putpixel((x, y), dk if v < lo else mid_dk if v < q else lt if v > hi else base)
+    return img
+
+
 def rim(style: str) -> Image.Image:
-    """24×24 九宫格（border-image-slice: 8），中间透明。"""
+    """24×24 九宫格（border-image-slice: 8），中间透明。D = A 加木纹疤、四角黄铜钉、黄铜线带高光。"""
+    if style == "D":
+        return rim_d()
     img = Image.new("RGBA", (24, 24), (0, 0, 0, 0))
     d = ImageDraw.Draw(img)
     wood, dk, md, lt, brass = (rgba(P[k]) for k in ("wood", "wood_dk", "wood_md", "wood_lt", "brass"))
@@ -266,6 +331,57 @@ def rim(style: str) -> Image.Image:
         d.rectangle([7, 7, 16, 16], outline=rgba(P["ink"]))
         d.line([6, 6, 17, 6], fill=dk)
     d.rectangle([8, 8, 15, 15], fill=(0, 0, 0, 0))
+    return img
+
+
+def rim_d() -> Image.Image:
+    img = rim("A")
+    px = img.load()
+    wood, dk, lt, brass, brass_dk = (rgba(P[k]) for k in ("wood", "wood_dk", "wood_lt", "brass", "brass_dk"))
+    grain = shade(wood, 0.82)
+    # 边段（8–15）上的木纹：断续的深纹 + 一个小疤，四条边各不一样但都在中段，round 重复时接得上
+    for x in (9, 10, 13):
+        px[x, 3] = grain
+    for x in (8, 11, 12, 15):
+        px[x, 20] = grain
+    for y in (9, 12, 13):
+        px[3, y] = grain
+    for y in (8, 10, 14, 15):
+        px[20, y] = grain
+    px[11, 4], px[12, 4] = dk, grain
+    px[19, 11] = dk
+    # 四角黄铜钉（2×2：亮、暗）
+    for x, y in ((3, 3), (19, 3), (3, 19), (19, 19)):
+        px[x, y], px[x + 1, y] = brass, brass_dk
+        px[x, y + 1], px[x + 1, y + 1] = brass_dk, rgba(P["ink"])
+    # 黄铜内线：上、左边亮，下、右边暗（左上来光）
+    for t in range(7, 17):
+        px[t, 7] = shade(brass, 1.15)
+        px[7, t] = shade(brass, 1.15)
+        px[t, 16] = brass_dk
+        px[16, t] = brass_dk
+    return img
+
+
+def slot_d(w: int, h: int) -> Image.Image:
+    """空格 D：毡面压下去一点的凹槽（上、左边暗，下、右边亮）+ 中间一圈缝线虚框。"""
+    img = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+    d = ImageDraw.Draw(img)
+    d.rectangle([0, 0, w - 1, h - 1], fill=rgba(P["felt_dk"], 110))
+    d.line([0, 0, w - 1, 0], fill=(10, 25, 15, 150))
+    d.line([0, 0, 0, h - 1], fill=(10, 25, 15, 150))
+    d.line([1, h - 1, w - 1, h - 1], fill=rgba(P["felt_lt"], 170))
+    d.line([w - 1, 1, w - 1, h - 1], fill=rgba(P["felt_lt"], 170))
+    line = rgba(P["felt_line"], 200)
+    m = 3 if w >= 40 else 2
+    for x in range(m, w - m):
+        if (x - m) % 3 != 2:
+            img.putpixel((x, m), line)
+            img.putpixel((x, h - 1 - m), line)
+    for y in range(m, h - m):
+        if (y - m) % 3 != 2:
+            img.putpixel((m, y), line)
+            img.putpixel((w - 1 - m, y), line)
     return img
 
 

@@ -293,12 +293,24 @@ def lamp_drawn(base: Image.Image) -> Image.Image:
     bottom = max(y for _, y in flame)
     cx = round(sum(x for x, _ in flame) / len(flame))
     colors = {"c": CREAM, "y": LAMP, "o": LAMP2}
+    halo = (255, 214, 120, 255)  # 灯罩被火苗照亮的那一圈，亮一帧暗一帧，像光在跳
+    def near_glass(c):  # 灯罩玻璃：和玻璃色接近的浅色像素（整根灯罩跟着火苗明暗）
+        return c[3] and sum(abs(c[k] - glass[k]) for k in range(3)) < 60
+    glass_px = [(x, y) for y in range(int(h * 0.6)) for x in range(w) if near_glass(px[x, y]) or (x, y) in fs]
     frames = []
-    for shape in FLAMES:
+    for i, shape in enumerate(FLAMES):
         img = base.copy()
         p = img.load()
         for x, y in flame:
             p[x, y] = glass
+        if i in (1, 3):  # 逐像素往暖光色混一半，保留玻璃原来的明暗和高光
+            for x, y in glass_px:
+                r, g, b, a = p[x, y]
+                p[x, y] = ((r + halo[0]) // 2, (g + halo[1]) // 2, (b + halo[2]) // 2, a)
+        elif i == 2:  # 火苗矮下去那一帧，灯罩里暗一点
+            for x, y in glass_px:
+                r, g, b, a = p[x, y]
+                p[x, y] = (int(r * 0.88), int(g * 0.86), int(b * 0.8), a)
         for r, row in enumerate(shape):
             y = bottom - (len(shape) - 1 - r)
             for c, v in enumerate(row):
