@@ -324,6 +324,9 @@
 .nt-ptop { display: flex; align-items: baseline; gap: 8px; flex: 1; min-width: 0; }
 .nt-ptop .nt-prompt { flex: 1; min-width: 0; }
 .nt-menu-button { flex: 0 0 auto; }
+/* 手机：♪ 在顶栏「菜单」旁边（菜单里的白天版按钮后面那个 ♪ 不再重复显示） */
+.nt-sound-button { flex: 0 0 auto; }
+.nt-menu .gm-music-toggle { display: none; }
 .nt-menu {
   position: absolute;
   top: 44px;

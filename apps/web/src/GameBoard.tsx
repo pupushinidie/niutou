@@ -25,6 +25,8 @@ import {
   type CardSize,
 } from "./art.js";
 import FlyLayer from "./FlyLayer.js";
+import { confirmSound, pickSound, useGameSfx } from "./game-sfx.js";
+import { SoundToggle, sfx, useSfxCountdown } from "./gm-sound.js";
 import GameRules from "./GameRules.js";
 import { ACTION_TIGHT, pickLayout, seatColumns, type Layout, type SeatSize } from "./layout.js";
 import { boardFrame, useRevealPlayback, type PlaybackOptions } from "./reveal.js";
@@ -266,12 +268,22 @@ function GameBoard(props: GameBoardProps) {
 
   function pickCard(card: number) {
     if (!canSelect) return;
-    if (card === committed && picked === null) return;
+    if (card === committed && picked === null) {
+      sfx.deny();
+      return;
+    }
     if (picked === card) {
+      confirmSound();
       confirmPick(card);
       return;
     }
+    pickSound(true, riskyPick(card));
     setPicked(card);
+  }
+  /** 这张牌会落进危险格（第六张）或比所有排尾都小。 */
+  function riskyPick(card: number): boolean {
+    const row = targetRow(game.rows, card);
+    return row === null || game.rows[row]!.length >= 5;
   }
   function confirmPick(card = picked) {
     if (card === null || !canSelect) return;
@@ -290,10 +302,12 @@ function GameBoard(props: GameBoardProps) {
   function pickRow(row: number) {
     if (!iChoose) return;
     if (pickedRow === row) {
+      confirmSound();
       onCommand({ type: "chooseRow", row });
       setPickedRow(null);
       return;
     }
+    pickSound(true);
     setPickedRow(row);
   }
   function confirmRow() {
@@ -345,6 +359,7 @@ function GameBoard(props: GameBoardProps) {
       if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)) return;
       const state = keyState.current;
       if (state.iChoose && ["1", "2", "3", "4"].includes(event.key)) {
+        pickSound(true);
         setPickedRow(Number(event.key) - 1);
         event.preventDefault();
         return;
@@ -360,12 +375,14 @@ function GameBoard(props: GameBoardProps) {
         if (hand.length === 0) return;
         const index = state.picked === null ? -1 : hand.indexOf(state.picked);
         const next = event.key === "ArrowRight" ? Math.min(hand.length - 1, index + 1) : index <= 0 ? 0 : index - 1;
+        pickSound(true);
         setPicked(hand[next]!);
         event.preventDefault();
       } else if ((event.key === "Enter" || event.key === " ") && state.picked !== null) {
         confirmPickRef.current();
         event.preventDefault();
       } else if (event.key === "Escape") {
+        if (state.picked !== null) pickSound(false);
         setPicked(null);
         setPickedRow(null);
       }
@@ -380,6 +397,17 @@ function GameBoard(props: GameBoardProps) {
 
   // ---------- 页面在后台时，标题提示「【该你选牌】」 ----------
   const needMe = !spectating && !autoPlaying && ((game.phase === "select" && !me.selected) || (game.phase === "chooseRow" && game.chooser === myId));
+
+  // ---------- 音效：动作、亮牌动画的每一拍、该你了、最后 5 秒 ----------
+  useGameSfx({
+    game,
+    selfId,
+    anim,
+    beat: playback.beat,
+    animDisabled: reduced || skipAnims || (props.playback?.disabled ?? false),
+    needMe: needMe && !anim && game.phase !== "gameOver",
+  });
+  useSfxCountdown(needMe && !anim, secondsLeft);
   useEffect(() => {
     const base = "谁是牛头王 · 在线对战";
     const update = () => {
@@ -587,6 +615,7 @@ function GameBoard(props: GameBoardProps) {
             data-tutorial={`row-${r + 1}`}
             onClick={choosable ? () => pickRow(r) : undefined}
             role={choosable ? "button" : undefined}
+            data-sfx={choosable ? "none" : undefined}
             aria-label={choosable ? `收${ROW_LABEL[r]}，罚 ${bulls} 个牛头` : undefined}
           >
             <div className="nt-rowhead" data-rowhead={r} data-tutorial="row-bulls" title={`${ROW_LABEL[r]}：${bulls} 个牛头`}>
@@ -652,6 +681,7 @@ function GameBoard(props: GameBoardProps) {
               className={`nt-hcard${isPicked ? " picked" : ""}${isCommitted ? " committed" : ""}`}
               disabled={!canSelect}
               onClick={() => pickCard(card)}
+              data-sfx={canSelect ? "none" : undefined}
               title={isCommitted ? "已扣下（点「撤回」可以收回）" : isPicked ? "再点一下确认" : `选 ${card}`}
               data-tutorial={isCommitted ? "committed-card" : `card:${card}`}
               data-card={card}
@@ -681,7 +711,7 @@ function GameBoard(props: GameBoardProps) {
         <button className="quiet-button nt-big" type="button" disabled={busy} onClick={undo} data-tutorial="undo">撤回</button>
       )}
       {picked !== null && (
-        <button className="quiet-button nt-small" type="button" onClick={() => setPicked(null)}>取消</button>
+        <button className="quiet-button nt-small" type="button" data-sfx="none" onClick={() => { pickSound(false); setPicked(null); }}>取消</button>
       )}
       {iChoose && (
         <button className="primary-button nt-big" type="button" disabled={pickedRow === null || busy} onClick={confirmRow} data-tutorial="confirm-row">确认</button>
@@ -800,6 +830,8 @@ function GameBoard(props: GameBoardProps) {
             <strong className="nt-prompt" role="status">{anim ? "亮牌中" : prompt}</strong>
             {timer}
           </div>
+          {/* 手机：♪ 放在顶栏「菜单」旁边，随时能调音量（菜单里的那份就不再放） */}
+          <SoundToggle className="quiet-button nt-sound-button" />
           <button className="quiet-button nt-menu-button" type="button" aria-expanded={menuOpen} onClick={() => setMenuOpen(!menuOpen)}>菜单</button>
           {menuOpen && (
             <div className="nt-menu" role="dialog" aria-label="菜单">

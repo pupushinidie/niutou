@@ -30,6 +30,7 @@ import {
   type TutorialMove,
   type TutorialStep,
 } from "@niutou/game";
+import { sfx } from "../gm-sound.js";
 import GameBoard from "../GameBoard.js";
 import { Coach, isTouchDevice, StepPips, type CoachView } from "./Coach.js";
 import { writeTutorial } from "./storage.js";
@@ -162,6 +163,10 @@ export default function TutorialMode({ name, brand, themeToggle, theme, waitingR
     watchDelay: () => 1000,
   });
   const { game, step, index, practice, flash } = tutorial;
+  // 剧本里点了别的（不是咕噜嘎说的那一步）：响一下「不行」
+  useEffect(() => {
+    if (flash) sfx.deny();
+  }, [flash]);
   const holding = useRevealHold(game);
   const anchor = useStepAnchor(step, game.version);
 

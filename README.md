@@ -271,6 +271,18 @@ createSceneRoom(game, opts?: {
 
 只有像素风一种画面，配色分夜间（深色，默认）和白天（白底）两种，顶栏随时切换，记在浏览器的 `gm-pixel-theme` 里（全站共用）。夜间配色就是 `app-pixel.css` 和牌桌样式本身；白天版由 `apps/web/day-theme.ts` 在构建时按 `apps/web/day-palette.ts` 的调色表换色生成，机械换色不合适的地方写在 `apps/web/src/theme-day.css`。
 
+## 声音
+
+这款还没有背景音乐（`useBgm(NO_BGM)`），进了房间和教程里顶栏有 ♪ 面板调音效、语音；手机牌桌上 ♪ 在顶栏「菜单」旁边。共用的 `gm-sound.tsx` 不要改（各仓库一模一样）。
+
+动作音效在 `apps/web/src/game-sfx.ts`（自己的动作响亮，别人的减半，观战都算别人的；进房间 / 重连第一次拿到状态不响）：
+
+- 选牌：点选手牌 `select`（会落进第六格 / 比排尾都小时后面跟一声低沉的提醒）、取消、确认轻点；扣下 `card`、撤回 `draw`、改选 `card`；别人扣牌、撤回也响（减半）。
+- 亮牌跟着动画的拍子响：翻牌 `reveal` + 几下 `flip`，每张接上去 `card`，第六张落进危险格是招牌的**牛铃警报**，整排飞走 `hit` + `draw`，收完是招牌的**牛叫「哞——」**（牛头越多越长越响；自己收再加 `bust`）。规则 C 选排同样。点「跳过动画」后面的就不响。
+- 该你选牌 / 选排 `yourTurn`（动画放完才响），最后 5 秒倒计时，超时代出 `timeout`；局末 `score`（本局零牛头是大的），点「继续」叮一声，新一局 `shuffle` + `deal` + `roundStart`；终局 `gameOver`（赢 / 输），接着牛头王一声长长的牛叫；再来一局 `gameStart` + `deal`。
+- 房间：进出、开局、聊天由 `useRoomSfx`（App.tsx），服务器拒绝操作 `error`；教程里点错一步 `deny`。
+- 开发模式下每个音效名字记到 `window.__sfxLog`（自测脚本 `~/projects/qa-reports/tools/niutou-sfx.mjs` 用）。
+
 ## 部署
 
 服务器上 `~/niutou`，pm2 进程 `niutou`（端口 3015），网页在 `/var/www/niutou`，Caddy `handle_path /niutou/*`（在付费网关 `@games` 里）。pm2 按仓库根目录的 `ecosystem.config.cjs` 直接启动 `node --import tsx` 进程跑服务端。端口和密钥（PORT、ADMIN_TOKEN、TURN_*、WEB_ORIGINS）存在 pm2 里，不进仓库。每局的种子（256 位十六进制密钥）、开房选项和动作序列写进 `logs/games.jsonl`，同一种子按顺序重放 `log` 就能复现整场。

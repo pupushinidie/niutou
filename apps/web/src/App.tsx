@@ -18,7 +18,7 @@ import RoomChat from "./RoomChat.js";
 import { roomRole, RoomSettingsPanel, SeatSwitch } from "./RoomExtras.js";
 import { socket } from "./socket.js";
 import { ThemeToggle, useTheme, type Theme } from "./theme.js";
-import { NO_BGM, SoundToggle, useBgm } from "./gm-sound.js";
+import { NO_BGM, SoundToggle, sfx, useBgm, useRoomSfx } from "./gm-sound.js";
 import { TutorialInvite } from "./tutorial/Invite.js";
 import { readTutorial } from "./tutorial/storage.js";
 import { GAME_ID } from "./tutorial/tutorialGame.js";
@@ -48,6 +48,11 @@ function isStale(next: LobbyRoomSnapshot, current: LobbyRoomSnapshot | null): bo
 
 type Confirm = (request: { title: string; detail: string; confirmLabel: string }) => Promise<boolean>;
 
+/** 服务器拒绝了操作。「这一手已经结算」是点晚了（不算错），不响。 */
+function errorSound(message: string) {
+  if (!message.includes("已经结算")) sfx.error();
+}
+
 function App() {
   const [mode, setMode] = useState<EntryMode>("create");
   const [name, setName] = useState("");
@@ -71,6 +76,11 @@ function App() {
   const [tutorialOpen, setTutorialOpen] = useState(() => new URLSearchParams(window.location.search).has("tutorial"));
   // 声音：进了房间（等候房间、对局、观战）和新手教程里顶栏有 ♪ 面板（音效、语音音量）；这款还没有背景音乐。
   useBgm(room || tutorialOpen ? NO_BGM : null);
+  // 房间里的提示音：有人进出、开局、收到别人的聊天。聊天只留最近几十条，按最后一条的 id 变了几次来数。
+  const chatSeen = useRef({ id: "", count: 0 });
+  const lastChat = room?.chat[room.chat.length - 1];
+  if (lastChat && lastChat.id !== chatSeen.current.id) chatSeen.current = { id: lastChat.id, count: chatSeen.current.count + 1 };
+  useRoomSfx(room ? { members: room.members.length, playing: room.status === "playing", chatCount: chatSeen.current.count, lastChatMine: lastChat?.senderId === socket.id } : null);
   function closeTutorial() {
     setTutorialOpen(false);
     const params = new URLSearchParams(window.location.search);
@@ -130,7 +140,10 @@ function App() {
       wasDisconnected.current = true;
     };
     const handleRoomUpdate = (snapshot: LobbyRoomSnapshot) => setRoom((current) => (isStale(snapshot, current) ? current : snapshot));
-    const handleRoomError = (message: string) => setError(message);
+    const handleRoomError = (message: string) => {
+      setError(message);
+      errorSound(message);
+    };
     const handleLobbyUpdate = (rooms: PublicRoomSummary[]) => setLobbyRooms(rooms);
     const handleRoomClosed = ({ reason }: { reason: string }) => {
       setRoom(null);
@@ -250,6 +263,7 @@ function App() {
       setBusy(false);
       if (!response.ok) {
         setError(response.error);
+        errorSound(response.error);
         return;
       }
       // 回执里的房间可能比已经收到的广播旧（人机在这期间又动了一步）：旧的不要盖掉新的
@@ -261,7 +275,10 @@ function App() {
   function roomCommand(send: (ack: (response: { ok: true; data: void } | { ok: false; error: string }) => void) => void) {
     setError("");
     send((response) => {
-      if (!response.ok) setError(response.error);
+      if (!response.ok) {
+        setError(response.error);
+        errorSound(response.error);
+      }
     });
   }
 
